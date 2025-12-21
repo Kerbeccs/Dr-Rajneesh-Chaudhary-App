@@ -1,0 +1,21 @@
+// This file is intentionally minimal
+// Plugin versions are managed in settings.gradle using the plugin DSL
+// Dependencies are managed in app/build.gradle
+
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+        maven { url 'https://storage.googleapis.com/download.flutter.io' }
+    }
+}
+
+rootProject.buildDir = '../build'
+
+subprojects {
+    project.buildDir = "${rootProject.buildDir}/${project.name}"
+}
+
+tasks.register("clean", Delete) {
+    delete rootProject.buildDir
+}

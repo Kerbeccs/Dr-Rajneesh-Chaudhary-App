@@ -1,0 +1,54 @@
+name: test_app
+description: Dr. Rajnish - Medical Appointment and Patient Management App
+publish_to: 'none'
+version: 1.0.4+5
+
+environment:
+  sdk: ^3.5.4
+
+dependencies:
+  flutter:
+    sdk: flutter
+  firebase_core: ^2.24.2
+  firebase_auth: ^4.17.4
+  cloud_firestore: ^4.15.3
+  firebase_crashlytics: ^3.4.9
+  get_it: ^7.6.4
+  provider: ^6.0.3
+  google_sign_in: ^6.2.2
+  intl: ^0.18.1
+  image_picker: ^1.0.7
+  firebase_storage: ^11.6.5
+  razorpay_flutter: ^1.2.0
+  firebase_app_check: ^0.2.1+8
+  logger: ^2.0.2
+  cupertino_icons: ^1.0.8
+  flutter_native_splash: ^2.4.4
+  share_plus: ^7.2.2
+  path_provider: ^2.1.4
+  shared_preferences: ^2.2.2
+  image: ^4.1.7
+  url_launcher: ^6.2.2
+  package_info_plus: ^8.0.2
+  crypto: ^3.0.6
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+  flutter_launcher_icons: ^0.13.1
+
+flutter:
+  uses-material-design: true
+  
+  # Add assets section
+  assets:
+    - assets/logos/app_logo.png
+    - assets/logos/splash.png
+    - assets/logos/google-37.png
+    - assets/logos/wave_dark.png
+    - assets/logos/wave_light.png
+    - assets/logos/public-health.png
+    - assets/logos/Chibi_Doctor_Character_Joyfully_Jumping_On_Black_Background-removebg-preview.png
+    - assets/logos/Chibi_Anime_Doctor_Character_Jumping_With_Joyful_Expression-removebg-preview.png
+    - assets/logos/parcha.jpg

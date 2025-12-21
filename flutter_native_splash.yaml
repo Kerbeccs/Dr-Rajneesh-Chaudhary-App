@@ -1,0 +1,19 @@
+# Disable native splash screen as we're using a Flutter splash screen
+flutter_native_splash:
+  # Completely disable the native splash
+  color: "#FFFFFF" 
+  image: null
+  branding: false
+  color_dark: "#FFFFFF"
+  image_dark: null
+  android_12:
+    # Completely disable Android 12+ splash
+    image: null
+    icon_background_color: "#FFFFFF"
+    image_dark: null
+    icon_background_color_dark: "#FFFFFF"
+  web: false
+  
+  android_gravity: center
+  ios_content_mode: center
+  fullscreen: true

@@ -1,0 +1,53 @@
+// PRODUCTION-READY FIREBASE SECURITY RULES
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper function to check if the user is a doctor
+    function isDoctor() {
+      return request.auth != null && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.userType == 'doctor';
+    }
+    
+    // Helper function to check if the user is accessing their own data
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+    
+    // User collection rules
+    match /users/{userId} {
+      // Users can read and write their own data
+      // Doctors can read all user data but only update specific fields
+      allow read: if isOwner(userId) || isDoctor();
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId) || 
+        (isDoctor() && 
+          (request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['lastVisited', 'nextVisit', 'appointmentStatus', 'problemDescription'])));
+      allow delete: if isOwner(userId);
+    }
+    
+    // Reports collection rules
+    match /reports/{reportId} {
+      // Patients can read and create their own reports
+      // Doctors can read all reports and update them
+      allow read: if request.auth != null && 
+        (resource.data.patientId == request.auth.uid || isDoctor());
+      allow create: if request.auth != null && 
+        request.resource.data.patientId == request.auth.uid;
+      allow update, delete: if isDoctor() || 
+        (request.auth != null && resource.data.patientId == request.auth.uid);
+    }
+    
+    // Appointments collection rules (if you create a separate collection)
+    match /appointments/{appointmentId} {
+      // Patients can read and create their own appointments
+      // Doctors can read and update all appointments
+      allow read: if request.auth != null && 
+        (resource.data.patientId == request.auth.uid || isDoctor());
+      allow create: if request.auth != null && 
+        request.resource.data.patientId == request.auth.uid;
+      allow update, delete: if isDoctor() || 
+        (request.auth != null && resource.data.patientId == request.auth.uid);
+    }
+  }
+} 
