@@ -1,9 +1,16 @@
 import 'package:flutter/foundation.dart';
 import '../services/database_service.dart';
 import '../models/feedback_model.dart';
+import '../utils/locator.dart'; // Import DI locator
 
 class FeedbackViewModel extends ChangeNotifier {
-  final DatabaseService _databaseService = DatabaseService();
+  // Use dependency injection to get shared DatabaseService instance
+  // This ensures consistent data access across the app
+  final DatabaseService _databaseService;
+  
+  // Constructor with optional parameter for testing
+  FeedbackViewModel({DatabaseService? databaseService})
+      : _databaseService = databaseService ?? locator<DatabaseService>();
 
   bool _isLoading = false;
   String? _errorMessage;

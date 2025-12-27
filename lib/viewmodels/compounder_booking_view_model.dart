@@ -4,8 +4,12 @@ import 'package:intl/intl.dart';
 import '../services/database_service.dart';
 import '../services/compounder_payment_service.dart';
 import '../services/whatsapp_service.dart';
+import '../utils/locator.dart'; // Import DI locator
 
 class CompounderBookingViewModel extends ChangeNotifier {
+  // Use dependency injection for shared service instances
+  // All CompounderBookingViewModel instances share the same services
+  // Benefits: consistent state, reduced memory, easier testing
   final DatabaseService _db;
   final FirebaseFirestore _firestore;
   final CompounderPaymentService _paymentService;
@@ -16,13 +20,15 @@ class CompounderBookingViewModel extends ChangeNotifier {
   bool get isProcessing => _isProcessing;
   String? get errorMessage => _errorMessage;
 
+  // Constructor with optional parameters for testing
+  // Uses DI container (locator) if not provided
   CompounderBookingViewModel({
     DatabaseService? databaseService,
     FirebaseFirestore? firestore,
     CompounderPaymentService? paymentService,
-  })  : _db = databaseService ?? DatabaseService(),
-        _firestore = firestore ?? FirebaseFirestore.instance,
-        _paymentService = paymentService ?? CompounderPaymentService();
+  })  : _db = databaseService ?? locator<DatabaseService>(),
+        _firestore = firestore ?? locator<FirebaseFirestore>(),
+        _paymentService = paymentService ?? locator<CompounderPaymentService>();
 
   Future<void> _createAppointmentDocument({
     required int seatNumber,
@@ -74,11 +80,11 @@ class CompounderBookingViewModel extends ChangeNotifier {
   String _getTimeSlotRange(String timeSlot) {
     switch (timeSlot) {
       case 'morning':
-        return '9:15 AM - 1:00 PM';
+        return '9:30 AM - 2:30 PM'; // Morning: 9:30-2:30
       case 'afternoon':
-        return '2:00 PM - 5:00 PM';
+        return '3:00 PM - 5:00 PM'; // Afternoon: 3:00-5:00
       case 'evening':
-        return '6:00 PM - 8:30 PM';
+        return '5:30 PM - 8:00 PM'; // Evening: 5:30-8:00
       default:
         return '';
     }
@@ -89,17 +95,77 @@ class CompounderBookingViewModel extends ChangeNotifier {
     required String mobile,
     required int age,
     required String aadhaarLast4,
+    String? userPhoneNumber,
   }) async {
     return _db.createPatientAfterPayment(
       name: name,
       mobileNumber: mobile,
       age: age,
       aadhaarLast4: aadhaarLast4,
+      userPhoneNumber: userPhoneNumber,
     );
   }
 
   Future<void> _updateExistingPatientVisit(String tokenId) async {
     await _db.updatePatientLastVisited(tokenId);
+  }
+
+  // Direct booking without payment (when fee is valid within 5 days)
+  Future<void> bookForExistingTokenWithoutPayment({
+    required String tokenId,
+    required String patientNameFallback,
+    required String mobileFallback,
+    required int seatNumber,
+    required DateTime selectedDate,
+    required String selectedTimeSlotKey,
+  }) async {
+    if (_isProcessing) return;
+    _isProcessing = true;
+    _errorMessage = null;
+    notifyListeners();
+    try {
+      // Fetch patient details if available
+      String name = patientNameFallback;
+      String mobile = mobileFallback;
+      final snap = await _firestore
+          .collection('patients')
+          .where('tokenId', isEqualTo: tokenId)
+          .limit(1)
+          .get();
+      if (snap.docs.isNotEmpty) {
+        final data = snap.docs.first.data();
+        name = data['name'] ?? name;
+        mobile = data['mobileNumber'] ?? mobile;
+      }
+
+      // Do NOT update lastVisited - fee is still valid
+      await _createAppointmentDocument(
+        seatNumber: seatNumber,
+        selectedDate: selectedDate,
+        selectedTimeSlotKey: selectedTimeSlotKey,
+        patientName: name,
+        patientToken: tokenId,
+      );
+
+      // Send WhatsApp notification to doctor
+      final formattedDate = DateFormat('yyyy-MM-dd').format(selectedDate);
+      final timeRange = _getTimeSlotRange(selectedTimeSlotKey);
+      await WhatsAppService.sendBookingNotification(
+        patientName: name,
+        patientToken: tokenId,
+        seatNumber: seatNumber,
+        appointmentDate: formattedDate,
+        appointmentTime: timeRange,
+      );
+
+      // No payment logging for free booking
+    } catch (e) {
+      _errorMessage = e.toString();
+      rethrow;
+    } finally {
+      _isProcessing = false;
+      notifyListeners();
+    }
   }
 
   Future<void> bookForExistingToken({
@@ -130,6 +196,7 @@ class CompounderBookingViewModel extends ChangeNotifier {
         mobile = data['mobileNumber'] ?? mobile;
       }
 
+      // Update lastVisited when payment is made
       await _updateExistingPatientVisit(tokenId);
       await _createAppointmentDocument(
         seatNumber: seatNumber,
@@ -183,23 +250,15 @@ class CompounderBookingViewModel extends ChangeNotifier {
     _errorMessage = null;
     notifyListeners();
     try {
-      // Check token ID limit before creating new patient
-      if (userPhoneNumber != null && userPhoneNumber.isNotEmpty) {
-        final tokenCount = await _db.getTokenIdCountForUser(userPhoneNumber);
-        if (tokenCount >= 7) {
-          _errorMessage =
-              'Maximum limit reached! You can create only 7 token IDs per phone number. Please use an existing token ID or contact support.';
-          _isProcessing = false;
-          notifyListeners();
-          throw Exception(_errorMessage);
-        }
-      }
+      // No token limit for compounder - they can create unlimited tokens
+      // (Removed 7 token limit check for compounder side)
 
       final tokenId = await _createNewPatient(
         name: name,
         mobile: mobile,
         age: age,
         aadhaarLast4: aadhaarLast4,
+        userPhoneNumber: userPhoneNumber,
       );
 
       await _createAppointmentDocument(

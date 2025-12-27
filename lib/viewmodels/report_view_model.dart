@@ -8,12 +8,28 @@ import '../services/database_service.dart';
 import '../models/report_model.dart';
 import '../services/logging_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../utils/locator.dart'; // Import DI locator
 
 class ReportViewModel extends ChangeNotifier {
-  final DatabaseService _databaseService = DatabaseService();
-  final FirebaseStorage _storage = FirebaseStorage.instance;
-  final ImagePicker _picker = ImagePicker();
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  // Use dependency injection to get shared service instances
+  // This ensures all ViewModels use the same DatabaseService instance
+  // Benefits: consistent cache, reduced memory, easier testing
+  final DatabaseService _databaseService;
+  final FirebaseStorage _storage;
+  final ImagePicker _picker;
+  final FirebaseFirestore _firestore;
+
+  // Constructor with optional parameters for testing
+  // If not provided, gets from DI container (locator)
+  ReportViewModel({
+    DatabaseService? databaseService,
+    FirebaseStorage? storage,
+    ImagePicker? picker,
+    FirebaseFirestore? firestore,
+  })  : _databaseService = databaseService ?? locator<DatabaseService>(),
+        _storage = storage ?? locator<FirebaseStorage>(),
+        _picker = picker ?? locator<ImagePicker>(),
+        _firestore = firestore ?? locator<FirebaseFirestore>();
 
   bool _isLoading = false;
   String? _errorMessage;
@@ -134,8 +150,7 @@ class ReportViewModel extends ChangeNotifier {
           final storageRef = FirebaseStorage.instance.refFromURL(fileUrl);
           await storageRef.delete();
         } catch (e, st) {
-          LoggingService.warning(
-              'Error deleting file from storage', e, st);
+          LoggingService.warning('Error deleting file from storage', e, st);
         }
       }
 

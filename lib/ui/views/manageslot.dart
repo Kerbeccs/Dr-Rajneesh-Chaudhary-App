@@ -1,9 +1,38 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../viewmodels/booking_view_model.dart';
+import 'package:intl/intl.dart';
 
-class ManageSlotsScreen extends StatelessWidget {
+class ManageSlotsScreen extends StatefulWidget {
   const ManageSlotsScreen({super.key});
+
+  @override
+  State<ManageSlotsScreen> createState() => _ManageSlotsScreenState();
+}
+
+class _ManageSlotsScreenState extends State<ManageSlotsScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // Load disabled slots when screen opens
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final bookingViewModel = Provider.of<BookingViewModel>(context, listen: false);
+      if (bookingViewModel.selectedDate != null) {
+        _loadDisabledSlots(bookingViewModel, bookingViewModel.selectedDate!);
+      } else {
+        // Select today by default and load
+        final today = DateTime.now();
+        bookingViewModel.selectDate(today);
+        _loadDisabledSlots(bookingViewModel, today);
+      }
+    });
+  }
+
+  Future<void> _loadDisabledSlots(BookingViewModel viewModel, DateTime date) async {
+    final dateKey = DateFormat('yyyy-MM-dd').format(date);
+    // Trigger reload from Firestore
+    await viewModel.loadDisabledTimeSlotsForDate(dateKey);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -30,7 +59,10 @@ class ManageSlotsScreen extends StatelessWidget {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: isSelected ? Colors.green : null,
                       ),
-                      onPressed: () => bookingViewModel.selectDate(date),
+                      onPressed: () {
+                        bookingViewModel.selectDate(date);
+                        _loadDisabledSlots(bookingViewModel, date);
+                      },
                       child: Text(
                         '${date.day}/${date.month}',
                         style: TextStyle(
@@ -52,27 +84,27 @@ class ManageSlotsScreen extends StatelessWidget {
                   context,
                   bookingViewModel,
                   'Morning',
-                  '9:15 AM - 1:00 PM',
+                  '9:30 AM - 2:30 PM',
                   'morning',
-                  40,
+                  70,
                 ),
                 const SizedBox(height: 16),
                 _buildTimeSlotCard(
                   context,
                   bookingViewModel,
                   'Afternoon',
-                  '2:00 PM - 5:00 PM',
+                  '3:00 PM - 5:00 PM',
                   'afternoon',
-                  40,
+                  30,
                 ),
                 const SizedBox(height: 16),
                 _buildTimeSlotCard(
                   context,
                   bookingViewModel,
                   'Evening',
-                  '6:00 PM - 8:30 PM',
+                  '5:30 PM - 8:00 PM',
                   'evening',
-                  30,
+                  50,
                 ),
               ],
             ),

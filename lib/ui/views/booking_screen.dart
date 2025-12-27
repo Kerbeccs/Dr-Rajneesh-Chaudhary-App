@@ -10,6 +10,7 @@ import '../../models/booking_slot.dart';
 import '../../services/database_service.dart';
 import '../../services/compounder_payment_service.dart';
 import '../../services/logging_service.dart';
+import '../../utils/locator.dart'; // Import DI locator
 
 class BookingScreen extends StatefulWidget {
   final bool
@@ -30,7 +31,8 @@ class _BookingScreenState extends State<BookingScreen> {
       CompounderPaymentService();
 
   // Pre-booking flow state
-  final DatabaseService _db = DatabaseService();
+  // Use dependency injection to get shared DatabaseService instance
+  final DatabaseService _db = locator<DatabaseService>();
   String? _pendingExistingTokenId;
   Map<String, dynamic>?
       _pendingNewPatientData; // {name, mobile, age, aadhaarLast4}
@@ -334,7 +336,13 @@ class _BookingScreenState extends State<BookingScreen> {
         return;
       }
 
-      final isValid = await _db.isFeeValidWithinDays(record, days: 7);
+      // Check validity: 5 days means day 1 to day 5 (booking date + 4 days)
+      // Use booking date instead of today - if booking for tomorrow, check validity on tomorrow
+      final isValid = await _db.isFeeValidWithinDays(
+        record,
+        days: 5,
+        referenceDate: selectedDate,
+      );
       // In compounder mode, always ask for payment method and log, even if fee is valid
       if (widget.isCompounderMode || !isValid) {
         _pendingExistingTokenId = tokenId;
@@ -357,7 +365,7 @@ class _BookingScreenState extends State<BookingScreen> {
         );
         if (mounted) {
           _showSuccessSnackBar(
-              'Appointment confirmed without payment (valid within 7 days).');
+              'Appointment confirmed without payment (valid within 5 days).');
           Navigator.pop(context, true);
         }
       } catch (e) {
@@ -478,24 +486,29 @@ class _BookingScreenState extends State<BookingScreen> {
       }
 
       // Check token ID limit before proceeding
+      // Skip limit check for compounder (phone number 1234567890)
       final authViewModel = Provider.of<AuthViewModel>(context, listen: false);
       final userPhone = authViewModel.currentUser?.phoneNumber;
       if (userPhone != null && userPhone.isNotEmpty) {
-        try {
-          final tokenCount = await _db.getTokenIdCountForUser(userPhone);
-          if (tokenCount >= 7) {
-            _showErrorSnackBar(
-                'Maximum limit reached! You can create only 7 token IDs per phone number. Please use an existing token ID or contact support.');
+        // Check if this is the compounder's phone number (with or without country code)
+        final isCompounder = userPhone.contains('1234567890');
+        if (!isCompounder) {
+          try {
+            final tokenCount = await _db.getTokenIdCountForUser(userPhone);
+            if (tokenCount >= 7) {
+              _showErrorSnackBar(
+                  'Maximum limit reached! You can create only 7 token IDs per phone number. Please use an existing token ID or contact support.');
+              return;
+            }
+            // Show warning if approaching limit
+            if (tokenCount >= 5) {
+              _showWarningSnackBar(
+                  'Warning: You have $tokenCount/7 token IDs. You can create ${7 - tokenCount} more.');
+            }
+          } catch (e) {
+            _showErrorSnackBar('Error checking token limit: $e');
             return;
           }
-          // Show warning if approaching limit
-          if (tokenCount >= 5) {
-            _showWarningSnackBar(
-                'Warning: You have $tokenCount/7 token IDs. You can create ${7 - tokenCount} more.');
-          }
-        } catch (e) {
-          _showErrorSnackBar('Error checking token limit: $e');
-          return;
         }
       }
 
@@ -666,7 +679,7 @@ class _BookingScreenState extends State<BookingScreen> {
       BookingSlot slot, dynamic user, String patientName) {
     return {
       'key': 'rzp_test_Kt8jSnWJ7nCCwX',
-      'amount': 30000,
+      'amount': 40000, // 400 rupees (Razorpay uses paise, so 400 * 100 = 40000)
       'name': 'Doctor Appointment',
       'description': 'Booking for Seat ${slot.seatNumber} - $patientName',
       'timeout': 300,

@@ -1,7 +1,7 @@
 name: test_app
 description: Dr. Rajnish - Medical Appointment and Patient Management App
 publish_to: 'none'
-version: 1.0.4+5
+version: 1.0.9+10
 
 environment:
   sdk: ^3.5.4
@@ -51,4 +51,4 @@ flutter:
     - assets/logos/public-health.png
     - assets/logos/Chibi_Doctor_Character_Joyfully_Jumping_On_Black_Background-removebg-preview.png
     - assets/logos/Chibi_Anime_Doctor_Character_Jumping_With_Joyful_Expression-removebg-preview.png
-    - assets/logos/parcha.jpg
+    - assets/logos/parcha.jpeg

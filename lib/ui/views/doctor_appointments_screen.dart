@@ -3,12 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../../viewmodels/doctor_appointments_view_model.dart';
 import '../widgets/appointment_card.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'dart:ui' as ui;
-import 'package:flutter/services.dart';
-import 'package:path_provider/path_provider.dart';
-import 'dart:io';
-import 'package:share_plus/share_plus.dart';
+import '../../services/parcha_print_service.dart';
 
 class DoctorAppointmentsScreen extends StatefulWidget {
   const DoctorAppointmentsScreen({super.key});
@@ -208,6 +203,77 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
             ),
           ),
 
+          // Time Slot Selection (only show if date is selected)
+          if (_viewModel!.selectedDate != null)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Select Time Slot:',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor:
+                                _viewModel!.selectedTimeSlot == 'morning'
+                                    ? Colors.blue
+                                    : null,
+                          ),
+                          onPressed: () {
+                            _performViewModelOperation(
+                                (vm) async => vm.selectTimeSlot('morning'));
+                          },
+                          child: const Text('Morning\n9:30-2:30',
+                              textAlign: TextAlign.center),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor:
+                                _viewModel!.selectedTimeSlot == 'afternoon'
+                                    ? Colors.blue
+                                    : null,
+                          ),
+                          onPressed: () {
+                            _performViewModelOperation(
+                                (vm) async => vm.selectTimeSlot('afternoon'));
+                          },
+                          child: const Text('Afternoon\n3:00-5:00',
+                              textAlign: TextAlign.center),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor:
+                                _viewModel!.selectedTimeSlot == 'evening'
+                                    ? Colors.blue
+                                    : null,
+                          ),
+                          onPressed: () {
+                            _performViewModelOperation(
+                                (vm) async => vm.selectTimeSlot('evening'));
+                          },
+                          child: const Text('Evening\n5:30-8:00',
+                              textAlign: TextAlign.center),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+              ],
+            ),
+          ),
+
           // Session Timer
           if (_viewModel!.isSessionActive)
             Container(
@@ -231,7 +297,28 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
 
           // Appointments List
           Expanded(
-            child: _viewModel!.isLoading
+            child: _viewModel!.selectedTimeSlot == null
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(
+                          Icons.access_time,
+                          size: 64,
+                          color: Colors.grey,
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Please select a time slot',
+                          style:
+                              Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    color: Colors.grey,
+                                  ),
+                        ),
+                      ],
+                    ),
+                  )
+                : _viewModel!.isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : _viewModel!.appointments.isEmpty
                     ? Center(
@@ -245,7 +332,7 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
                             ),
                             const SizedBox(height: 16),
                             Text(
-                              'No appointments for ${DateFormat('MMM d').format(_viewModel!.selectedDate!)}',
+                                  'No appointments for ${DateFormat('MMM d').format(_viewModel!.selectedDate!)} - ${_viewModel!.selectedTimeSlot}',
                               style: Theme.of(context)
                                   .textTheme
                                   .titleMedium
@@ -263,7 +350,8 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
                           padding: const EdgeInsets.symmetric(vertical: 8),
                           itemCount: _viewModel!.appointments.length,
                           itemBuilder: (context, index) {
-                            final appointment = _viewModel!.appointments[index];
+                                final appointment =
+                                    _viewModel!.appointments[index];
                             return AppointmentCard(
                               appointment: appointment,
                               isSessionActive: _viewModel!.isSessionActive,
@@ -273,7 +361,8 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
                                             appointment['appointmentId'],
                                           ))
                                   : null,
-                              onPrint: () => _printAppointmentCard(appointment),
+                                  onPrint: () =>
+                                      _printAppointmentCard(appointment),
                             );
                           },
                         ),
@@ -285,107 +374,10 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
   }
 
   Future<void> _printAppointmentCard(Map<String, dynamic> appt) async {
-    try {
-      final tokenId = appt['patientToken'] as String?;
-      if (tokenId == null || tokenId.isEmpty) {
-        _showSnack('Missing token id');
-        return;
-      }
-
-      // 1) Load patient details by tokenId from 'patients'
-      final patSnap = await FirebaseFirestore.instance
-          .collection('patients')
-          .where('tokenId', isEqualTo: tokenId)
-          .limit(1)
-          .get();
-      if (patSnap.docs.isEmpty) {
-        _showSnack('Patient record not found');
-        return;
-      }
-      final p = patSnap.docs.first.data();
-
-      final name = (p['name'] ?? '').toString();
-      final age = (p['age'] ?? '').toString();
-      final weight = (p['weightKg'] ?? '').toString();
-      final sex = (p['sex'] ?? '').toString();
-      final phone = (p['mobileNumber'] ?? '').toString();
-      final token = (p['tokenId'] ?? '').toString();
-      final aadhaar = (p['aadhaarLast4'] ?? '').toString();
-
-      // 2) Load base image from assets
-      final byteData = await rootBundle.load('assets/logos/parcha.jpg');
-      final Uint8List bytes = byteData.buffer.asUint8List();
-      final ui.Codec codec = await ui.instantiateImageCodec(bytes);
-      final ui.FrameInfo frame = await codec.getNextFrame();
-      final ui.Image baseImage = frame.image;
-
-      // 3) Draw text onto the image
-      final ui.PictureRecorder recorder = ui.PictureRecorder();
-      final ui.Canvas canvas = ui.Canvas(recorder);
-      final paint = ui.Paint();
-      // Draw the base image first
-      canvas.drawImage(baseImage, const ui.Offset(0, 0), paint);
-
-      textPainter(String text, double x, double y,
-          {double fontSize = 28, ui.Color color = const ui.Color(0xFF000000)}) {
-        final ui.ParagraphBuilder builder = ui.ParagraphBuilder(
-          ui.ParagraphStyle(
-            textAlign: TextAlign.left,
-            fontSize: fontSize,
-            maxLines: 1,
-          ),
-        )
-          ..pushStyle(ui.TextStyle(color: color))
-          ..addText(text);
-        final ui.Paragraph paragraph = builder.build()
-          ..layout(const ui.ParagraphConstraints(width: double.infinity));
-        canvas.drawParagraph(paragraph, ui.Offset(x, y));
-      }
-
-      // Positioning: tweak Y values to align nicely on your parcha
-      double startY = 80; // top padding
-      const double startX = 40; // left padding
-      const double gapY = 44; // vertical gap between lines
-
-      // Shift content down by 5 lines
-      startY += gapY * 7;
-
-      textPainter('Token: $token', startX, startY);
-      startY += gapY;
-      textPainter('Name: $name', startX, startY);
-      startY += gapY;
-      textPainter('Age: $age', startX, startY);
-      startY += gapY;
-      textPainter('Weight: $weight', startX, startY);
-      startY += gapY;
-      textPainter('Sex: $sex', startX, startY);
-      startY += gapY;
-      textPainter('Aadhaar: $aadhaar', startX, startY);
-      startY += gapY;
-      textPainter('Phone: $phone', startX, startY);
-
-      final ui.Picture picture = recorder.endRecording();
-      final ui.Image finalImage = await picture.toImage(
-        baseImage.width,
-        baseImage.height,
-      );
-      final ByteData? pngBytes =
-          await finalImage.toByteData(format: ui.ImageByteFormat.png);
-      if (pngBytes == null) {
-        _showSnack('Failed to compose image');
-        return;
-      }
-
-      // 4) Save to temporary file
-      final dir = await getTemporaryDirectory();
-      final file = File('${dir.path}/parcha_$token.png');
-      await file.writeAsBytes(pngBytes.buffer.asUint8List(), flush: true);
-
-      // 5) Share
-      await Share.shareXFiles([XFile(file.path)], text: 'Patient Details');
-    } catch (e) {
-      _showSnack('Print failed: $e');
-    }
+    await ParchaPrintService.printPatientCard(
+      appointment: appt,
+      onError: _showSnack,
+    );
   }
 
   void _showSnack(String msg) {

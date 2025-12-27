@@ -355,10 +355,13 @@ class DatabaseService {
   }
 
   Future<bool> isFeeValidWithinDays(PatientRecord record,
-      {int days = 7}) async {
+      {int days = 5, DateTime? referenceDate}) async {
     if (record.lastVisited == null) return false;
-    final now = DateTime.now();
-    return now.difference(record.lastVisited!).inDays < days;
+    final checkDate = referenceDate ?? DateTime.now();
+    // Check if within validity period (booking date as day 1, so <= days-1)
+    // Example: days=5 means valid for 5 days total (0,1,2,3,4 days difference)
+    // If booking for tomorrow, check validity on tomorrow, not today
+    return checkDate.difference(record.lastVisited!).inDays <= (days - 1);
   }
 
   // Generate simple, unique, human-friendly token based on counter
@@ -451,11 +454,16 @@ class DatabaseService {
   }) async {
     try {
       // Check token ID limit (max 7 per user phone number)
+      // Skip limit check for compounder (phone number 1234567890)
       if (userPhoneNumber != null && userPhoneNumber.isNotEmpty) {
-        final currentCount = await getTokenIdCountForUser(userPhoneNumber);
-        if (currentCount >= 7) {
-          throw Exception(
-              'Maximum limit reached. You can create only 7 token IDs per phone number. Please use an existing token ID or contact support.');
+        // Check if this is the compounder's phone number (with or without country code)
+        final isCompounder = userPhoneNumber.contains('1234567890');
+        if (!isCompounder) {
+          final currentCount = await getTokenIdCountForUser(userPhoneNumber);
+          if (currentCount >= 7) {
+            throw Exception(
+                'Maximum limit reached. You can create only 7 token IDs per phone number. Please use an existing token ID or contact support.');
+          }
         }
       }
 

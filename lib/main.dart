@@ -18,12 +18,18 @@ import 'viewmodels/doctor_appointments_view_model.dart';
 import 'viewmodels/compounder_booking_view_model.dart';
 import 'viewmodels/report_view_model.dart';
 import 'viewmodels/patient_appointment_status_view_model.dart';
+import 'utils/locator.dart'; // Import DI setup
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Initialize Firebase
   await Firebase.initializeApp();
+  
+  // Initialize Dependency Injection
+  // This sets up all service singletons that will be shared across the app
+  // Prevents multiple instances and ensures consistent state
+  setupLocator();
 
   // Initialize Firebase App Check (required for Play Store builds)
   // This enables Play Integrity API for production and Debug provider for development

@@ -5,13 +5,30 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/doctor_scheduler.dart';
 import 'package:intl/intl.dart';
+import '../utils/locator.dart'; // Import DI locator
 
 class DoctorAppointmentsViewModel extends ChangeNotifier {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final FirebaseAuth _auth = FirebaseAuth.instance;
+  // Use dependency injection to get shared Firebase instances
+  // This ensures all ViewModels use the same instances = consistent state
+  final FirebaseFirestore _firestore;
+  final FirebaseAuth _auth;
   final DoctorScheduler _scheduler = DoctorScheduler();
 
+  // Constructor with optional parameters for testing
+  DoctorAppointmentsViewModel({
+    FirebaseFirestore? firestore,
+    FirebaseAuth? auth,
+  })  : _firestore = firestore ?? locator<FirebaseFirestore>(),
+        _auth = auth ?? locator<FirebaseAuth>() {
+    // Initialize the ViewModel
+    _initializeSession();
+    _selectedDate = DateTime.now();
+    _getCurrentDoctorId();
+    _loadConsultationStats();
+  }
+
   DateTime? _selectedDate;
+  String? _selectedTimeSlot; // 'morning', 'afternoon', or 'evening'
   List<Map<String, dynamic>> _appointments = [];
   bool _isLoading = false;
   String? _errorMessage;
@@ -46,6 +63,7 @@ class DoctorAppointmentsViewModel extends ChangeNotifier {
   DateTime? _sessionStartTimeForTracking;
 
   DateTime? get selectedDate => _selectedDate;
+  String? get selectedTimeSlot => _selectedTimeSlot;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
   bool get isSessionActive => _isSessionActive;
@@ -63,13 +81,8 @@ class DoctorAppointmentsViewModel extends ChangeNotifier {
 
   List<Map<String, dynamic>> get appointments => _appointments;
 
-  // Constructor: Initialize without starting listeners
-  DoctorAppointmentsViewModel() {
-    _initializeSession();
-    _selectedDate = DateTime.now();
-    _getCurrentDoctorId();
-    _loadConsultationStats();
-  }
+  // Constructor already defined above with DI parameters
+  // Removed duplicate constructor
 
   // Get current doctor ID from Firebase Auth
   Future<void> _getCurrentDoctorId() async {
@@ -135,21 +148,23 @@ class DoctorAppointmentsViewModel extends ChangeNotifier {
   }
 
   void _startAppointmentsListener() {
-    if (_isPaused || _selectedDate == null) {
+    if (_isPaused || _selectedDate == null || _selectedTimeSlot == null) {
       debugPrint(
-          '[_startAppointmentsListener] ViewModel paused or date not selected, not starting listener.');
+          '[_startAppointmentsListener] ViewModel paused or date/timeSlot not selected, not starting listener.');
       return;
     }
 
     debugPrint(
-        '[_startAppointmentsListener] Starting listener for date: ${DateFormat('yyyy-MM-dd').format(_selectedDate!)}');
+        '[_startAppointmentsListener] Starting listener for date: ${DateFormat('yyyy-MM-dd').format(_selectedDate!)}, timeSlot: $_selectedTimeSlot');
 
     final formattedDate = DateFormat('yyyy-MM-dd').format(_selectedDate!);
+    final timeRange = getTimeSlotRange(_selectedTimeSlot!);
 
     _appointmentsSubscription?.cancel();
     _appointmentsSubscription = _firestore
         .collection('appointments')
         .where('appointmentDate', isEqualTo: formattedDate)
+        .where('appointmentTime', isEqualTo: timeRange)
         .where('status', whereIn: ['pending', 'in_progress'])
         .snapshots()
         .listen((snapshot) async {
@@ -282,8 +297,12 @@ class DoctorAppointmentsViewModel extends ChangeNotifier {
                 });
               }
 
-              appointmentsList.sort((a, b) => (a['time'] as String? ?? '')
-                  .compareTo(b['time'] as String? ?? ''));
+              // Sort by seat number (ascending order)
+              appointmentsList.sort((a, b) {
+                final seatA = a['slotNumber'] as int? ?? 0;
+                final seatB = b['slotNumber'] as int? ?? 0;
+                return seatA.compareTo(seatB);
+              });
 
               _appointments = appointmentsList;
               _errorMessage = null;
@@ -377,8 +396,29 @@ class DoctorAppointmentsViewModel extends ChangeNotifier {
     }
 
     _selectedDate = date;
+    _selectedTimeSlot = null; // Reset time slot when date changes
+    _appointments = []; // Clear appointments
+    if (!_isPaused) notifyListeners();
+  }
+
+  void selectTimeSlot(String timeSlot) {
+    if (_isPaused) return;
+    _selectedTimeSlot = timeSlot;
     _startAppointmentsListener();
     if (!_isPaused) notifyListeners();
+  }
+
+  String getTimeSlotRange(String timeSlot) {
+    switch (timeSlot) {
+      case 'morning':
+        return '9:30 AM - 2:30 PM';
+      case 'afternoon':
+        return '3:00 PM - 5:00 PM';
+      case 'evening':
+        return '5:30 PM - 8:00 PM';
+      default:
+        return '';
+    }
   }
 
   // Add new methods for consultation tracking

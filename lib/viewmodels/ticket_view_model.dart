@@ -4,10 +4,12 @@ import '../models/doctor_scheduler.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:async';
 import 'dart:math';
+import '../utils/locator.dart'; // Import DI locator
 
 class TicketViewModel extends ChangeNotifier {
   final DoctorScheduler _scheduler = DoctorScheduler();
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  // Use dependency injection to get shared FirebaseFirestore instance
+  final FirebaseFirestore _firestore;
   final String userId;
 
   // Basic info
@@ -62,7 +64,11 @@ class TicketViewModel extends ChangeNotifier {
   String _doctorStatus = 'Not started';
   DateTime? _sessionStartTime;
 
-  TicketViewModel({required this.userId}) {
+  // Constructor with optional parameter for testing
+  TicketViewModel({
+    required this.userId,
+    FirebaseFirestore? firestore,
+  }) : _firestore = firestore ?? locator<FirebaseFirestore>() {
     _loadPatientData();
     _startSessionListener();
     _startAppointmentsListener();

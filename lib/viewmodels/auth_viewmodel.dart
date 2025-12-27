@@ -6,10 +6,13 @@ import '../services/logging_service.dart';
 import '../services/token_cache_service.dart';
 import '../services/auth_storage_service.dart';
 import '../services/admin_auth_service.dart';
+import '../utils/locator.dart'; // Import DI locator
 
 class AuthViewModel extends ChangeNotifier {
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  // Use dependency injection to get shared Firebase instances
+  // All AuthViewModel instances share the same Firebase instances
+  final FirebaseAuth _auth;
+  final FirebaseFirestore _firestore;
   User? _user;
   bool _isLoading = false;
   String? _errorMessage;
@@ -27,7 +30,12 @@ class AuthViewModel extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
   UserModel? get currentUser => _currentUserModel;
 
-  AuthViewModel() {
+  // Constructor with optional parameters for testing
+  AuthViewModel({
+    FirebaseAuth? auth,
+    FirebaseFirestore? firestore,
+  })  : _auth = auth ?? locator<FirebaseAuth>(),
+        _firestore = firestore ?? locator<FirebaseFirestore>() {
     _auth.authStateChanges().listen((User? user) {
       _user = user;
       if (user != null) {

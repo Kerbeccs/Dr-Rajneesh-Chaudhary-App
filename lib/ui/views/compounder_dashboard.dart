@@ -5,12 +5,10 @@ import 'package:provider/provider.dart';
 import '../../viewmodels/booking_view_model.dart';
 import '../../viewmodels/auth_viewmodel.dart';
 import '../../services/compounder_payment_service.dart';
+import '../../services/database_service.dart';
+import '../../utils/locator.dart'; // Import DI locator
+import '../../services/parcha_print_service.dart';
 import 'booking_screen.dart';
-import 'dart:ui' as ui;
-import 'package:flutter/services.dart';
-import 'package:path_provider/path_provider.dart';
-import 'dart:io';
-import 'package:share_plus/share_plus.dart';
 
 class CompounderDashboard extends StatelessWidget {
   const CompounderDashboard({super.key});
@@ -72,7 +70,9 @@ class _CompounderBookingCardState extends State<_CompounderBookingCard> {
   bool _isSubmitting = false;
 
   late BookingViewModel _bookingViewModel;
-  final CompounderPaymentService _paymentService = CompounderPaymentService();
+  // Use dependency injection to get shared CompounderPaymentService instance
+  final CompounderPaymentService _paymentService =
+      locator<CompounderPaymentService>();
 
   @override
   void initState() {
@@ -170,34 +170,21 @@ class _CompounderBookingCardState extends State<_CompounderBookingCard> {
           }, SetOptions(merge: true));
         }
       } else {
-        // New patient: create token
-        final counters =
-            FirebaseFirestore.instance.collection('meta').doc('counters');
-        final token =
-            await FirebaseFirestore.instance.runTransaction((txn) async {
-          final counterSnap = await txn.get(counters);
-          int next = 1;
-          if (counterSnap.exists) {
-            final data = counterSnap.data() as Map<String, dynamic>;
-            next = (data['patientCounter'] ?? 0) + 1;
-          }
-          txn.set(counters, {'patientCounter': next}, SetOptions(merge: true));
-          return 'PAT${next.toString().padLeft(6, '0')}';
-        });
-        tokenId = token;
-        await FirebaseFirestore.instance
-            .collection('patients')
-            .doc(tokenId)
-            .set({
-          'tokenId': tokenId,
-          'name': patientName,
-          'mobileNumber': mobile,
-          'age': age,
-          'aadhaarLast4': aadhaar4,
-          'createdAt': DateTime.now().toIso8601String(),
-          'lastVisited': DateTime.now().toIso8601String(),
-          'updatedAt': DateTime.now().toIso8601String(),
-        });
+        // New patient: create token using database service (handles token limit check)
+        final authViewModel =
+            Provider.of<AuthViewModel>(context, listen: false);
+        final userPhone = authViewModel.currentUser?.phoneNumber;
+
+        // Use database service from DI container
+        final _db = locator<DatabaseService>();
+
+        tokenId = await _db.createPatientAfterPayment(
+          name: patientName,
+          mobileNumber: mobile,
+          age: age,
+          aadhaarLast4: aadhaar4,
+          userPhoneNumber: userPhone,
+        );
       }
 
       // Book the seat (disable it)
@@ -419,6 +406,15 @@ class _TodaysPatientsCard extends StatefulWidget {
 
 class _TodaysPatientsCardState extends State<_TodaysPatientsCard> {
   final TextEditingController _searchController = TextEditingController();
+  DateTime? _selectedDate;
+  String? _selectedTimeSlot;
+
+  @override
+  void initState() {
+    super.initState();
+    // Default to today
+    _selectedDate = DateTime.now();
+  }
 
   @override
   void dispose() {
@@ -426,108 +422,31 @@ class _TodaysPatientsCardState extends State<_TodaysPatientsCard> {
     super.dispose();
   }
 
-  Future<void> _printAppointmentCard(Map<String, dynamic> appt) async {
-    try {
-      final tokenId = appt['patientToken'] as String?;
-      if (tokenId == null || tokenId.isEmpty) {
-        _showSnack('Missing token id');
-        return;
-      }
+  List<DateTime> get availableDates {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final tomorrow = today.add(const Duration(days: 1));
+    return [today, tomorrow];
+  }
 
-      // 1) Load patient details by tokenId from 'patients'
-      final patSnap = await FirebaseFirestore.instance
-          .collection('patients')
-          .where('tokenId', isEqualTo: tokenId)
-          .limit(1)
-          .get();
-      if (patSnap.docs.isEmpty) {
-        _showSnack('Patient record not found');
-        return;
-      }
-      final p = patSnap.docs.first.data();
-
-      final name = (p['name'] ?? '').toString();
-      final age = (p['age'] ?? '').toString();
-      final weight = (p['weightKg'] ?? '').toString();
-      final sex = (p['sex'] ?? '').toString();
-      final phone = (p['mobileNumber'] ?? '').toString();
-      final token = (p['tokenId'] ?? '').toString();
-      final aadhaar = (p['aadhaarLast4'] ?? '').toString();
-
-      // 2) Load base image from assets
-      final byteData = await rootBundle.load('assets/logos/parcha.jpg');
-      final Uint8List bytes = byteData.buffer.asUint8List();
-      final ui.Codec codec = await ui.instantiateImageCodec(bytes);
-      final ui.FrameInfo frame = await codec.getNextFrame();
-      final ui.Image baseImage = frame.image;
-
-      // 3) Draw text onto the image
-      final ui.PictureRecorder recorder = ui.PictureRecorder();
-      final ui.Canvas canvas = ui.Canvas(recorder);
-      final paint = ui.Paint();
-      // Draw the base image first
-      canvas.drawImage(baseImage, const ui.Offset(0, 0), paint);
-
-      textPainter(String text, double x, double y,
-          {double fontSize = 28, ui.Color color = const ui.Color(0xFF000000)}) {
-        final ui.ParagraphBuilder builder = ui.ParagraphBuilder(
-          ui.ParagraphStyle(
-            textAlign: TextAlign.left,
-            fontSize: fontSize,
-            maxLines: 1,
-          ),
-        )
-          ..pushStyle(ui.TextStyle(color: color))
-          ..addText(text);
-        final ui.Paragraph paragraph = builder.build()
-          ..layout(const ui.ParagraphConstraints(width: double.infinity));
-        canvas.drawParagraph(paragraph, ui.Offset(x, y));
-      }
-
-      // Positioning: tweak Y values to align nicely on your parcha
-      double startY = 80; // top padding
-      const double startX = 40; // left padding
-      const double gapY = 44; // vertical gap between lines
-
-      // Shift content down by 5 lines
-      startY += gapY * 7;
-
-      textPainter('Token: $token', startX, startY);
-      startY += gapY;
-      textPainter('Name: $name', startX, startY);
-      startY += gapY;
-      textPainter('Age: $age', startX, startY);
-      startY += gapY;
-      textPainter('Weight: $weight', startX, startY);
-      startY += gapY;
-      textPainter('Sex: $sex', startX, startY);
-      startY += gapY;
-      textPainter('Aadhaar: $aadhaar', startX, startY);
-      startY += gapY;
-      textPainter('Phone: $phone', startX, startY);
-
-      final ui.Picture picture = recorder.endRecording();
-      final ui.Image finalImage = await picture.toImage(
-        baseImage.width,
-        baseImage.height,
-      );
-      final ByteData? pngBytes =
-          await finalImage.toByteData(format: ui.ImageByteFormat.png);
-      if (pngBytes == null) {
-        _showSnack('Failed to compose image');
-        return;
-      }
-
-      // 4) Save to temporary file
-      final dir = await getTemporaryDirectory();
-      final file = File('${dir.path}/parcha_$token.png');
-      await file.writeAsBytes(pngBytes.buffer.asUint8List(), flush: true);
-
-      // 5) Share
-      await Share.shareXFiles([XFile(file.path)], text: 'Patient Details');
-    } catch (e) {
-      _showSnack('Print failed: $e');
+  String getTimeSlotRange(String timeSlot) {
+    switch (timeSlot) {
+      case 'morning':
+        return '9:30 AM - 2:30 PM';
+      case 'afternoon':
+        return '3:00 PM - 5:00 PM';
+      case 'evening':
+        return '5:30 PM - 8:00 PM';
+      default:
+        return '';
     }
+  }
+
+  Future<void> _printAppointmentCard(Map<String, dynamic> appt) async {
+    await ParchaPrintService.printPatientCard(
+      appointment: appt,
+      onError: _showSnack,
+    );
   }
 
   void _showSnack(String msg) {
@@ -535,14 +454,30 @@ class _TodaysPatientsCardState extends State<_TodaysPatientsCard> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
-  Stream<List<Map<String, dynamic>>> _todayAppointmentsStream() {
-    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
-    // OrderBy requires an index when combined with where; if index missing, fallback to simple fetch
+  Stream<List<Map<String, dynamic>>> _appointmentsStream() {
+    if (_selectedDate == null || _selectedTimeSlot == null) {
+      return Stream.value([]);
+    }
+
+    final formattedDate = DateFormat('yyyy-MM-dd').format(_selectedDate!);
+    final timeRange = getTimeSlotRange(_selectedTimeSlot!);
+
     final col = FirebaseFirestore.instance.collection('appointments');
     return col
-        .where('appointmentDate', isEqualTo: today)
+        .where('appointmentDate', isEqualTo: formattedDate)
+        .where('appointmentTime', isEqualTo: timeRange)
+        .where('status', whereIn: ['pending', 'in_progress'])
         .snapshots()
-        .map((q) => q.docs.map((d) => d.data()).toList());
+        .map((q) {
+          final list = q.docs.map((d) => d.data()).toList();
+          // Sort by seat number
+          list.sort((a, b) {
+            final seatA = a['seatNumber'] as int? ?? 0;
+            final seatB = b['seatNumber'] as int? ?? 0;
+            return seatA.compareTo(seatB);
+          });
+          return list;
+        });
   }
 
   @override
@@ -557,62 +492,180 @@ class _TodaysPatientsCardState extends State<_TodaysPatientsCard> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Today\'s Patients',
+              Text('Patients List',
                   style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 16),
+
+              // Date Selection
+              Text('Select Date:',
+                  style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 8),
-              TextField(
-                controller: _searchController,
-                decoration: const InputDecoration(
-                  labelText: 'Search by Token ID',
-                  prefixIcon: Icon(Icons.search),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: availableDates.map((date) {
+                    final isSelected = _selectedDate != null &&
+                        _selectedDate!.year == date.year &&
+                        _selectedDate!.month == date.month &&
+                        _selectedDate!.day == date.day;
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 8.0),
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: isSelected ? Colors.green : null,
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            _selectedDate = date;
+                            _selectedTimeSlot = null; // Reset time slot
+                          });
+                        },
+                        child: Text(DateFormat('MMM d').format(date)),
+                      ),
+                    );
+                  }).toList(),
                 ),
-                onChanged: (_) => setState(() {}),
               ),
-              const SizedBox(height: 12),
-              StreamBuilder<List<Map<String, dynamic>>>(
-                stream: _todayAppointmentsStream(),
-                builder: (context, snap) {
-                  if (!snap.hasData) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  final list = snap.data ?? [];
-                  final q = _searchController.text.trim().toLowerCase();
-                  final filtered = q.isEmpty
-                      ? list
-                      : list
-                          .where((e) => (e['patientToken'] ?? '')
-                              .toString()
-                              .toLowerCase()
-                              .contains(q))
-                          .toList();
-                  if (filtered.isEmpty) {
-                    return const Text('No patients found.');
-                  }
-                  return ListView.separated(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: filtered.length,
-                    separatorBuilder: (_, __) => const Divider(height: 16),
-                    itemBuilder: (context, idx) {
-                      final e = filtered[idx];
-                      return ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: Colors.blue.shade100,
-                          child: const Icon(Icons.tag, color: Colors.blue),
+              const SizedBox(height: 16),
+
+              // Time Slot Selection (only show if date is selected)
+              if (_selectedDate != null) ...[
+                Text('Select Time Slot:',
+                    style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _selectedTimeSlot == 'morning'
+                              ? Colors.blue
+                              : null,
                         ),
-                        title: Text(e['patientToken'] ?? ''),
-                        subtitle: Text(
-                            '${e['patientName'] ?? ''} • Seat ${e['seatNumber'] ?? ''} • ${e['appointmentTime'] ?? ''}'),
-                        trailing: IconButton(
-                          icon: const Icon(Icons.print, color: Colors.blue),
-                          onPressed: () => _printAppointmentCard(e),
-                          tooltip: 'Print Patient Details',
+                        onPressed: () {
+                          setState(() {
+                            _selectedTimeSlot = 'morning';
+                          });
+                        },
+                        child: const Text('Morning\n9:30-2:30',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontSize: 11)),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _selectedTimeSlot == 'afternoon'
+                              ? Colors.blue
+                              : null,
                         ),
+                        onPressed: () {
+                          setState(() {
+                            _selectedTimeSlot = 'afternoon';
+                          });
+                        },
+                        child: const Text('Afternoon\n3:00-5:00',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontSize: 11)),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _selectedTimeSlot == 'evening'
+                              ? Colors.blue
+                              : null,
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            _selectedTimeSlot = 'evening';
+                          });
+                        },
+                        child: const Text('Evening\n5:30-8:00',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontSize: 11)),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+              ],
+
+              // Search field and patient list (only show if time slot is selected)
+              if (_selectedTimeSlot != null) ...[
+                TextField(
+                  controller: _searchController,
+                  decoration: const InputDecoration(
+                    labelText: 'Search by Token ID',
+                    prefixIcon: Icon(Icons.search),
+                  ),
+                  onChanged: (_) => setState(() {}),
+                ),
+                const SizedBox(height: 12),
+                StreamBuilder<List<Map<String, dynamic>>>(
+                  stream: _appointmentsStream(),
+                  builder: (context, snap) {
+                    if (!snap.hasData) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    final list = snap.data ?? [];
+                    final q = _searchController.text.trim().toLowerCase();
+                    final filtered = q.isEmpty
+                        ? list
+                        : list
+                            .where((e) => (e['patientToken'] ?? '')
+                                .toString()
+                                .toLowerCase()
+                                .contains(q))
+                            .toList();
+                    if (filtered.isEmpty) {
+                      return const Padding(
+                        padding: EdgeInsets.all(16.0),
+                        child: Text('No patients found for this slot.'),
                       );
-                    },
-                  );
-                },
-              )
+                    }
+                    return ListView.separated(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: filtered.length,
+                      separatorBuilder: (_, __) => const Divider(height: 16),
+                      itemBuilder: (context, idx) {
+                        final e = filtered[idx];
+                        return ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor: Colors.blue.shade100,
+                            child: Text('${e['seatNumber'] ?? ''}',
+                                style: const TextStyle(color: Colors.blue)),
+                          ),
+                          title: Text('Token: ${e['patientToken'] ?? ''}'),
+                          subtitle: Text(
+                              'Name: ${e['patientName'] ?? ''}\nSeat: ${e['seatNumber'] ?? ''} • Time: ${e['appointmentTime'] ?? ''}'),
+                          isThreeLine: true,
+                          trailing: IconButton(
+                            icon: const Icon(Icons.print, color: Colors.blue),
+                            onPressed: () => _printAppointmentCard(e),
+                            tooltip: 'Print Patient Details',
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
+              ] else if (_selectedDate != null) ...[
+                const Padding(
+                  padding: EdgeInsets.all(16.0),
+                  child: Text('Please select a time slot to view patients.',
+                      style: TextStyle(color: Colors.grey)),
+                ),
+              ] else ...[
+                const Padding(
+                  padding: EdgeInsets.all(16.0),
+                  child: Text('Please select a date to begin.',
+                      style: TextStyle(color: Colors.grey)),
+                ),
+              ],
             ],
           ),
         ),
@@ -677,6 +730,12 @@ class _CompounderMenuGrid extends StatelessWidget {
             color: Colors.indigo,
             routeKey: 'patients',
           ),
+          const _MenuCard(
+            title: 'Search Tokens',
+            icon: Icons.search,
+            color: Colors.orange,
+            routeKey: 'search',
+          ),
         ],
       ),
     );
@@ -705,8 +764,16 @@ class _MenuCard extends StatelessWidget {
         onTap: () {
           if (routeKey == 'booking') {
             Navigator.pushNamed(context, '/compounder_booking');
+          } else if (routeKey == 'search') {
+            // Open the Token Search screen
+            Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => const _TokenSearchScreen(),
+            ));
           } else {
-            Navigator.pushNamed(context, '/compounder_patients');
+            // Open the Patients List screen
+            Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => const _PatientsListScreen(),
+            ));
           }
         },
         borderRadius: BorderRadius.circular(15),
@@ -735,6 +802,318 @@ class _MenuCard extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+// Screen to display patients list
+class _PatientsListScreen extends StatelessWidget {
+  const _PatientsListScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Patients List'),
+      ),
+      body: const SingleChildScrollView(
+        child: _TodaysPatientsCard(),
+      ),
+    );
+  }
+}
+
+// Screen to search tokens by phone number
+class _TokenSearchScreen extends StatefulWidget {
+  const _TokenSearchScreen();
+
+  @override
+  State<_TokenSearchScreen> createState() => _TokenSearchScreenState();
+}
+
+class _TokenSearchScreenState extends State<_TokenSearchScreen> {
+  final TextEditingController _phoneController = TextEditingController();
+  List<Map<String, dynamic>> _tokens = [];
+  bool _isLoading = false;
+  String? _errorMessage;
+
+  @override
+  void dispose() {
+    _phoneController.dispose();
+    super.dispose();
+  }
+
+  // Helper function to safely convert to Timestamp
+  Timestamp? _toTimestamp(dynamic value) {
+    if (value == null) return null;
+    if (value is Timestamp) return value;
+    if (value is String) {
+      try {
+        // Try to parse as DateTime first, then convert to Timestamp
+        final dateTime = DateTime.parse(value);
+        return Timestamp.fromDate(dateTime);
+      } catch (e) {
+        return null;
+      }
+    }
+    return null;
+  }
+
+  Future<void> _searchTokens() async {
+    final phoneNumber = _phoneController.text.trim();
+    if (phoneNumber.isEmpty) {
+      setState(() {
+        _errorMessage = 'Please enter a phone number';
+        _tokens = [];
+      });
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+      _tokens = [];
+    });
+
+    try {
+      // Search for tokens where patient's mobile number matches
+      final mobileQuery = await FirebaseFirestore.instance
+          .collection('patients')
+          .where('mobileNumber', isEqualTo: phoneNumber)
+          .get();
+
+      // Search for tokens created by this user (userPhoneNumber)
+      // Try with different phone formats
+      final phoneVariants = [
+        phoneNumber,
+        '+91$phoneNumber',
+        phoneNumber.startsWith('+91') ? phoneNumber.substring(3) : phoneNumber,
+      ].toSet().toList();
+
+      final userPhoneQuery = await FirebaseFirestore.instance
+          .collection('patients')
+          .where('userPhoneNumber', whereIn: phoneVariants)
+          .get();
+
+      // Combine results and remove duplicates
+      final Map<String, Map<String, dynamic>> tokensMap = {};
+
+      // Add mobile number matches
+      for (var doc in mobileQuery.docs) {
+        final data = doc.data();
+        tokensMap[data['tokenId']] = {
+          'tokenId': data['tokenId'] ?? '',
+          'name': data['name'] ?? '',
+          'age': data['age'] ?? '',
+          'mobileNumber': data['mobileNumber'] ?? '',
+          'userPhoneNumber': data['userPhoneNumber'] ?? '',
+          'createdAt': data['createdAt'],
+          'lastVisited': data['lastVisited'],
+        };
+      }
+
+      // Add userPhoneNumber matches
+      for (var doc in userPhoneQuery.docs) {
+        final data = doc.data();
+        tokensMap[data['tokenId']] = {
+          'tokenId': data['tokenId'] ?? '',
+          'name': data['name'] ?? '',
+          'age': data['age'] ?? '',
+          'mobileNumber': data['mobileNumber'] ?? '',
+          'userPhoneNumber': data['userPhoneNumber'] ?? '',
+          'createdAt': data['createdAt'],
+          'lastVisited': data['lastVisited'],
+        };
+      }
+
+      if (tokensMap.isEmpty) {
+        setState(() {
+          _errorMessage = 'No tokens found for this phone number';
+          _tokens = [];
+          _isLoading = false;
+        });
+        return;
+      }
+
+      // Convert to list and sort by creation date (newest first)
+      final tokensList = tokensMap.values.toList();
+      tokensList.sort((a, b) {
+        final aTime = _toTimestamp(a['createdAt']);
+        final bTime = _toTimestamp(b['createdAt']);
+        if (aTime == null && bTime == null) return 0;
+        if (aTime == null) return 1;
+        if (bTime == null) return -1;
+        return bTime.compareTo(aTime);
+      });
+
+      setState(() {
+        _tokens = tokensList;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'Error searching: $e';
+        _tokens = [];
+        _isLoading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Search Tokens by Phone'),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          children: [
+            // Search field
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _phoneController,
+                    decoration: const InputDecoration(
+                      labelText: 'Search by Phone Number',
+                      hintText: 'Patient or Creator phone',
+                      helperText: 'Searches both patient & creator phone',
+                      prefixIcon: Icon(Icons.phone),
+                      border: OutlineInputBorder(),
+                    ),
+                    keyboardType: TextInputType.phone,
+                    onSubmitted: (_) => _searchTokens(),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton(
+                  onPressed: _isLoading ? null : _searchTokens,
+                  child: _isLoading
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.search),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            // Results
+            if (_errorMessage != null)
+              Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Text(
+                  _errorMessage!,
+                  style: TextStyle(color: Colors.red.shade700),
+                ),
+              ),
+
+            if (_tokens.isNotEmpty) ...[
+              Text(
+                'Found ${_tokens.length} token(s)',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 8),
+            ],
+
+            Expanded(
+              child: _tokens.isEmpty
+                  ? Center(
+                      child: Text(
+                        _isLoading
+                            ? 'Searching...'
+                            : 'Enter a phone number to search for tokens',
+                        style: TextStyle(
+                          color: Colors.grey.shade600,
+                          fontSize: 16,
+                        ),
+                      ),
+                    )
+                  : ListView.separated(
+                      itemCount: _tokens.length,
+                      separatorBuilder: (_, __) => const Divider(),
+                      itemBuilder: (context, index) {
+                        final token = _tokens[index];
+                        final createdAt = _toTimestamp(token['createdAt']);
+                        final lastVisited = _toTimestamp(token['lastVisited']);
+                        final userPhone =
+                            token['userPhoneNumber']?.toString() ?? '';
+
+                        // Check if created by compounder (phone number 1234567890)
+                        final isCompounderCreated =
+                            userPhone.contains('1234567890');
+                        final creatorDisplay = isCompounderCreated
+                            ? 'Created by: Compounder'
+                            : userPhone.isNotEmpty
+                                ? 'Created by: $userPhone'
+                                : 'Created by: Unknown';
+
+                        return Card(
+                          elevation: 2,
+                          child: ListTile(
+                            leading: CircleAvatar(
+                              backgroundColor: isCompounderCreated
+                                  ? Colors.blue.shade100
+                                  : Colors.orange.shade100,
+                              child: Icon(
+                                isCompounderCreated
+                                    ? Icons.medical_services
+                                    : Icons.tag,
+                                color: isCompounderCreated
+                                    ? Colors.blue
+                                    : Colors.orange,
+                              ),
+                            ),
+                            title: Text(
+                              'Token: ${token['tokenId']}',
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Name: ${token['name']}'),
+                                Text('Age: ${token['age']}'),
+                                Text('Patient Phone: ${token['mobileNumber']}'),
+                                const SizedBox(height: 4),
+                                Text(
+                                  creatorDisplay,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: isCompounderCreated
+                                        ? Colors.blue.shade700
+                                        : Colors.green.shade700,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                if (createdAt != null)
+                                  Text(
+                                    'Created: ${DateFormat('dd/MM/yyyy').format(createdAt.toDate())}',
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey.shade600),
+                                  ),
+                                if (lastVisited != null)
+                                  Text(
+                                    'Last Visit: ${DateFormat('dd/MM/yyyy').format(lastVisited.toDate())}',
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey.shade600),
+                                  ),
+                              ],
+                            ),
+                            isThreeLine: true,
+                          ),
+                        );
+                      },
+                    ),
+            ),
+          ],
         ),
       ),
     );

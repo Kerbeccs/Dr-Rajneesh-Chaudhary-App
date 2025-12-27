@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../services/database_service.dart';
 import '../../models/patient_record.dart';
 import 'package:intl/intl.dart';
+import '../../utils/locator.dart'; // Import DI locator
 
 class PatientRecordsScreen extends StatefulWidget {
   const PatientRecordsScreen({super.key});
@@ -11,7 +12,8 @@ class PatientRecordsScreen extends StatefulWidget {
 }
 
 class _PatientRecordsScreenState extends State<PatientRecordsScreen> {
-  final DatabaseService _databaseService = DatabaseService();
+  // Use dependency injection to get shared DatabaseService instance
+  final DatabaseService _databaseService = locator<DatabaseService>();
   String searchQuery = '';
   List<PatientRecord> allPatients = [];
   List<PatientRecord> filteredPatients = [];
@@ -135,7 +137,8 @@ class PatientDetailsScreen extends StatefulWidget {
 }
 
 class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
-  final DatabaseService _databaseService = DatabaseService();
+  // Use dependency injection to get shared DatabaseService instance
+  final DatabaseService _databaseService = locator<DatabaseService>();
   late PatientRecord _patient;
   bool _isRefreshing = false;
 

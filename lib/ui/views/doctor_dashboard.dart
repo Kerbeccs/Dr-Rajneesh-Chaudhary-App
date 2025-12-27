@@ -6,6 +6,7 @@ import '../views/doctor_appointments_screen.dart';
 import '../../viewmodels/booking_view_model.dart';
 import '../views/manageslot.dart';
 import '../../services/compounder_payment_service.dart';
+import '../../utils/locator.dart'; // Import DI locator
 
 class DoctorDashboard extends StatelessWidget {
   const DoctorDashboard({super.key});
@@ -185,7 +186,8 @@ class _CompounderPaymentsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final service = CompounderPaymentService();
+    // Use dependency injection to get shared CompounderPaymentService instance
+    final service = locator<CompounderPaymentService>();
     return ExpansionTile(
       title: const Text('Compounder Payments (Last 3 Days)'),
       subtitle: const Text('Tap to view'),

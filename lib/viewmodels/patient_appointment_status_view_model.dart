@@ -6,10 +6,12 @@ import 'dart:async'; // Add this for StreamSubscription
 // Assuming you have a UserModel
 import '../models/doctor_scheduler.dart'; // To get scheduler stats
 import '../utils/appointment_estimator.dart'; // The calculation logic
+import '../utils/locator.dart'; // Import DI locator
 
 class PatientAppointmentStatusViewModel extends ChangeNotifier {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final FirebaseAuth _auth = FirebaseAuth.instance;
+  // Use dependency injection to get shared Firebase instances
+  final FirebaseFirestore _firestore;
+  final FirebaseAuth _auth;
   final AppointmentEstimator _estimator = AppointmentEstimator();
   final DoctorScheduler _scheduler = DoctorScheduler();
 
@@ -31,7 +33,12 @@ class PatientAppointmentStatusViewModel extends ChangeNotifier {
   // We need to know the current user's ID to fetch their appointment
   String? _currentUserId;
 
-  PatientAppointmentStatusViewModel() {
+  // Constructor with optional parameters for testing
+  PatientAppointmentStatusViewModel({
+    FirebaseFirestore? firestore,
+    FirebaseAuth? auth,
+  })  : _firestore = firestore ?? locator<FirebaseFirestore>(),
+        _auth = auth ?? locator<FirebaseAuth>() {
     _initializeAppointmentListener();
     _setupRealtimeListeners();
   }
