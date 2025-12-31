@@ -100,10 +100,35 @@
   </style>
   <script id="splash-screen-script">
     function removeSplashFromWeb() {
-      document.getElementById("splash")?.remove();
-      document.getElementById("splash-branding")?.remove();
+      const splash = document.getElementById("splash");
+      const splashBranding = document.getElementById("splash-branding");
+      const splashStyle = document.getElementById("splash-screen-style");
+      if (splash) splash.remove();
+      if (splashBranding) splashBranding.remove();
+      if (splashStyle) splashStyle.remove();
       document.body.style.background = "transparent";
     }
+    
+    // Remove splash screen after Flutter loads (called by Flutter)
+    window.addEventListener('flutter-first-frame', function() {
+      removeSplashFromWeb();
+    });
+    
+    // Remove immediately when Flutter bootstrap loads
+    window.addEventListener('load', function() {
+      // Give Flutter a moment to initialize, then remove splash
+      setTimeout(removeSplashFromWeb, 2000);
+    });
+    
+    // Fallback: Remove splash screen after 3 seconds if Flutter doesn't load
+    setTimeout(function() {
+      removeSplashFromWeb();
+    }, 3000);
+    
+    // Also remove on error immediately
+    window.addEventListener('error', function() {
+      setTimeout(removeSplashFromWeb, 500);
+    });
   </script>
 </head>
 <body>
@@ -113,8 +138,19 @@
       <img class="center" aria-hidden="true" src="splash/img/light-1x.png" alt="">
   </picture>
   
-  
-  <script src="flutter_bootstrap.js" async=""></script>
+  <script>
+    // Make removeSplashFromWeb available globally for Flutter to call
+    window.removeSplashFromWeb = function() {
+      const splash = document.getElementById("splash");
+      const splashBranding = document.getElementById("splash-branding");
+      const splashStyle = document.getElementById("splash-screen-style");
+      if (splash) splash.remove();
+      if (splashBranding) splashBranding.remove();
+      if (splashStyle) splashStyle.remove();
+      document.body.style.background = "transparent";
+    };
+  </script>
+  <script src="flutter_bootstrap.js" type="application/javascript"></script>
 
 
 </body></html>
