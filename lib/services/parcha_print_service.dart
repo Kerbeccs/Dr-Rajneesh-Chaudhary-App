@@ -1,7 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/services.dart';
 import 'dart:ui' as ui;
-import 'dart:io' if (dart.library.html) 'package:test_app/utils/file_stub.dart' show File;
+import 'dart:io' if (dart.library.html) 'package:test_app/utils/file_stub.dart'
+    show File;
+import 'dart:html' if (dart.library.io) 'dart:io' as html;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -265,13 +267,102 @@ class ParchaPrintService {
 
       // 4) Share - use different approach for web vs mobile
       if (kIsWeb) {
-        // For web: Use XFile.fromData() which works without file system
-        final xFile = XFile.fromData(
-          imageBytes,
-          mimeType: 'image/png',
-          name: 'parcha_$token.png',
-        );
-        await Share.shareXFiles([xFile], text: 'Patient Details');
+        // For web: Use browser print dialog (more reliable than share API for printing)
+        try {
+          // Create blob and data URL for the image
+          final blob = html.Blob([imageBytes], 'image/png');
+          final url = html.Url.createObjectUrlFromBlob(blob);
+
+          // Convert image bytes to base64 data URL for embedding in HTML
+          final base64Image =
+              Uri.dataFromBytes(imageBytes, mimeType: 'image/png').toString();
+
+          // Create HTML content with embedded image
+          final htmlContent = '''
+            <!DOCTYPE html>
+            <html>
+              <head>
+                <title>Print Patient Details - Token $token</title>
+                <style>
+                  @media print {
+                    body { 
+                      margin: 0; 
+                      padding: 0;
+                    }
+                    img { 
+                      width: 100%; 
+                      height: auto;
+                      display: block;
+                    }
+                  }
+                  @media screen {
+                    body {
+                      margin: 20px;
+                      text-align: center;
+                    }
+                    img {
+                      max-width: 100%;
+                      height: auto;
+                      border: 1px solid #ccc;
+                    }
+                  }
+                </style>
+              </head>
+              <body>
+                <img src="$base64Image" alt="Patient Details - Token $token" />
+                <script>
+                  window.onload = function() {
+                    // Small delay to ensure image is loaded
+                    setTimeout(function() {
+                      window.print();
+                      // Close window after print dialog is closed
+                      window.onafterprint = function() {
+                        window.close();
+                      };
+                    }, 250);
+                  };
+                </script>
+              </body>
+            </html>
+          ''';
+
+          // Create a blob URL for the HTML content
+          final htmlBlob = html.Blob([htmlContent], 'text/html');
+          final htmlUrl = html.Url.createObjectUrlFromBlob(htmlBlob);
+
+          // Open print window
+          final printWindow = html.window.open(htmlUrl, '_blank');
+
+          if (printWindow != null) {
+            // Clean up the blob URLs after a delay
+            Future.delayed(const Duration(seconds: 30), () {
+              html.Url.revokeObjectUrl(url);
+              html.Url.revokeObjectUrl(htmlUrl);
+            });
+          } else {
+            // If popup blocked, fallback to download
+            html.AnchorElement(
+              href: url,
+            )
+              ..setAttribute('download', 'parcha_$token.png')
+              ..click();
+            html.Url.revokeObjectUrl(url);
+            onError(
+                'Popup blocked. Image downloaded instead. Please print the downloaded file.');
+          }
+        } catch (e) {
+          // Fallback to share API if print dialog fails
+          try {
+            final xFile = XFile.fromData(
+              imageBytes,
+              mimeType: 'image/png',
+              name: 'parcha_$token.png',
+            );
+            await Share.shareXFiles([xFile], text: 'Patient Details');
+          } catch (shareError) {
+            onError('Print failed: $shareError');
+          }
+        }
       } else {
         // For mobile: Save to temporary file
         final dir = await getTemporaryDirectory();
