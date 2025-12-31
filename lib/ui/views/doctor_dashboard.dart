@@ -48,7 +48,7 @@ class DoctorDashboard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        "Dr. Rajneesh Chaudhary",
+                        "Dr. Rajnish Chaudhary",
                         style: Theme.of(context).textTheme.headlineSmall,
                       ),
                       const SizedBox(height: 8),
@@ -120,12 +120,22 @@ class DoctorDashboard extends StatelessWidget {
                       );
                     },
                   ),
+                  _buildMenuCard(
+                    context,
+                    'Last 3 Days\nPayments',
+                    Icons.payment,
+                    Colors.orange,
+                    () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const _CompounderPaymentsScreen(),
+                        ),
+                      );
+                    },
+                  ),
                 ],
               ),
-            ),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16.0),
-              child: _CompounderPaymentsCard(),
             ),
           ],
         ),
@@ -181,69 +191,93 @@ class DoctorDashboard extends StatelessWidget {
   }
 }
 
-class _CompounderPaymentsCard extends StatelessWidget {
-  const _CompounderPaymentsCard();
+// Screen to display compounder payments for last 3 days
+class _CompounderPaymentsScreen extends StatelessWidget {
+  const _CompounderPaymentsScreen();
 
   @override
   Widget build(BuildContext context) {
     // Use dependency injection to get shared CompounderPaymentService instance
     final service = locator<CompounderPaymentService>();
-    return ExpansionTile(
-      title: const Text('Compounder Payments (Last 3 Days)'),
-      subtitle: const Text('Tap to view'),
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16.0),
-          child: StreamBuilder<List<Map<String, dynamic>>>(
-            stream: service.paymentsForLast3Days(),
-            builder: (context, snap) {
-              if (!snap.hasData) {
-                return const Padding(
-                  padding: EdgeInsets.all(16.0),
-                  child: Center(child: CircularProgressIndicator()),
-                );
-              }
-              final items = snap.data ?? [];
-              if (items.isEmpty) {
-                return const Padding(
-                  padding: EdgeInsets.all(16.0),
-                  child: Text('No payments recorded.'),
-                );
-              }
-              return ListView.separated(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: items.length,
-                separatorBuilder: (_, __) => const Divider(height: 16),
-                itemBuilder: (context, idx) {
-                  final e = items[idx];
-                  return ListTile(
-                    leading: CircleAvatar(
-                      backgroundColor: (e['method'] == 'cash')
-                          ? Colors.green.shade100
-                          : Colors.blue.shade100,
-                      child: Icon(
-                        e['method'] == 'cash'
-                            ? Icons.attach_money
-                            : Icons.wifi_tethering,
-                        color: (e['method'] == 'cash')
-                            ? Colors.green
-                            : Colors.blue,
-                      ),
+    
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Compounder Payments (Last 3 Days)'),
+      ),
+      body: StreamBuilder<List<Map<String, dynamic>>>(
+        stream: service.paymentsForLast3Days(),
+        builder: (context, snap) {
+          if (!snap.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          final items = snap.data ?? [];
+          if (items.isEmpty) {
+            return const Center(
+              child: Padding(
+                padding: EdgeInsets.all(16.0),
+                child: Text(
+                  'No payments recorded in the last 3 days.',
+                  style: TextStyle(fontSize: 16),
+                ),
+              ),
+            );
+          }
+          return ListView.separated(
+            padding: const EdgeInsets.all(16.0),
+            itemCount: items.length,
+            separatorBuilder: (_, __) => const Divider(height: 16),
+            itemBuilder: (context, idx) {
+              final e = items[idx];
+              return Card(
+                elevation: 2,
+                child: ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: (e['method'] == 'cash')
+                        ? Colors.green.shade100
+                        : Colors.blue.shade100,
+                    child: Icon(
+                      e['method'] == 'cash'
+                          ? Icons.attach_money
+                          : Icons.wifi_tethering,
+                      color: (e['method'] == 'cash')
+                          ? Colors.green
+                          : Colors.blue,
                     ),
-                    title: Text(
-                        '${e['patientToken'] ?? ''} • ${e['patientName'] ?? ''}'),
-                    subtitle: Text(
-                        '${e['mobileNumber'] ?? ''} • ${(e['method'] ?? '').toString().toUpperCase()}'),
-                    trailing: Text('${e['date'] ?? ''}'),
-                  );
-                },
+                  ),
+                  title: Text(
+                    '${e['patientToken'] ?? ''} • ${e['patientName'] ?? ''}',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SizedBox(height: 4),
+                      Text('Mobile: ${e['mobileNumber'] ?? ''}'),
+                      Text(
+                        'Method: ${(e['method'] ?? '').toString().toUpperCase()}',
+                        style: TextStyle(
+                          color: (e['method'] == 'cash')
+                              ? Colors.green.shade700
+                              : Colors.blue.shade700,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                  trailing: Text(
+                    '${e['date'] ?? ''}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                  isThreeLine: true,
+                ),
               );
             },
-          ),
-        ),
-        const SizedBox(height: 8),
-      ],
+          );
+        },
+      ),
     );
   }
 }

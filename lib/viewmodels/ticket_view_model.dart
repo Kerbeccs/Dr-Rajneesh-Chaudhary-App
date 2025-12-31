@@ -14,7 +14,7 @@ class TicketViewModel extends ChangeNotifier {
 
   // Basic info
   String patientName = 'Loading...';
-  String doctorName = "Dr. Rajneesh Chaudhary";
+  String doctorName = "Dr. Rajnish Chaudhary";
   List<Map<String, dynamic>> bookedSlots = [];
   bool isExpanded = false;
   String waitingTime = "Calculating...";
@@ -619,7 +619,7 @@ class TicketViewModel extends ChangeNotifier {
 
       final userData = userDoc.data() as Map<String, dynamic>;
       patientName = userData['patientName'] ?? userData['name'] ?? 'Unknown';
-      doctorName = userData['doctorName'] ?? 'Dr. Rajneesh Chaudhary';
+      doctorName = userData['doctorName'] ?? 'Dr. Rajnish Chaudhary';
 
       averageConsultationTime = _scheduler.getAverageConsultationTime();
       _updateWaitingTimes();

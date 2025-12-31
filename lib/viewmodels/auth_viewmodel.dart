@@ -6,6 +6,7 @@ import '../services/logging_service.dart';
 import '../services/token_cache_service.dart';
 import '../services/auth_storage_service.dart';
 import '../services/admin_auth_service.dart';
+import '../services/password_service.dart';
 import '../utils/locator.dart'; // Import DI locator
 
 class AuthViewModel extends ChangeNotifier {
@@ -147,7 +148,7 @@ class AuthViewModel extends ChangeNotifier {
         final userModel = UserModel(
           uid: userCredential.user!.uid,
           email: email,
-          patientName: "Dr. Rajneesh Chaudhary",
+          patientName: "Dr. Rajnish Chaudhary",
           phoneNumber: "",
           age: 0,
           role: 'doctor',
@@ -453,8 +454,44 @@ class AuthViewModel extends ChangeNotifier {
       }
       final userData = query.docs.first.data();
 
-      // Check password (plaintext comparison for regular users - can be improved later)
-      if (userData['password'] != password) {
+      // Verify password - supports both hashed (new) and plaintext (old) for backward compatibility
+      final storedPasswordHash = userData['passwordHash'] as String?;
+      final storedPlaintextPassword = userData['password'] as String?;
+      
+      bool isPasswordValid = false;
+      
+      if (storedPasswordHash != null) {
+        // New users: password is hashed, verify using hash comparison
+        isPasswordValid = PasswordService.verifyPassword(password, storedPasswordHash);
+      } else if (storedPlaintextPassword != null) {
+        // Old users: password is plaintext (backward compatibility)
+        // Hash the provided password and compare (will migrate on next password change)
+        isPasswordValid = storedPlaintextPassword == password;
+        
+        // Optional: Auto-migrate old users by updating to hashed password on successful login
+        if (isPasswordValid) {
+          try {
+            final passwordHash = PasswordService.hashPassword(password);
+            await query.docs.first.reference.update({
+              'passwordHash': passwordHash,
+              // Optionally remove plaintext password after migration
+              // 'password': FieldValue.delete(), // Uncomment to remove plaintext after migration
+            });
+            LoggingService.info('Migrated user password to hashed format: $formattedPhone');
+          } catch (e) {
+            LoggingService.warning('Failed to migrate password to hash: $e');
+            // Don't fail login if migration fails
+          }
+        }
+      } else {
+        // No password field found
+        _errorMessage = 'Invalid account configuration. Please contact support.';
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      }
+
+      if (!isPasswordValid) {
         _errorMessage = 'Incorrect password.';
         _isLoading = false;
         notifyListeners();

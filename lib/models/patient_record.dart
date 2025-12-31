@@ -9,6 +9,7 @@ class PatientRecord {
   // Optional patient attributes captured during first registration
   final String? sex; // 'male' | 'female' | 'other'
   final int? weightKg; // patient weight in kilograms
+  final String? address; // patient address (max 50 characters)
   // Phone number of the logged-in user who booked
   final String? userPhoneNumber;
   final DateTime?
@@ -24,6 +25,7 @@ class PatientRecord {
     required this.aadhaarLast4,
     this.sex,
     this.weightKg,
+    this.address,
     this.userPhoneNumber,
     required this.createdAt,
     this.lastVisited,
@@ -40,6 +42,7 @@ class PatientRecord {
       // Only persist if provided
       if (sex != null) 'sex': sex,
       if (weightKg != null) 'weightKg': weightKg,
+      if (address != null) 'address': address,
       if (userPhoneNumber != null) 'userPhoneNumber': userPhoneNumber,
       'lastVisited': lastVisited?.toIso8601String(),
       'createdAt': createdAt.toIso8601String(),
@@ -58,6 +61,7 @@ class PatientRecord {
       aadhaarLast4: map['aadhaarLast4'] ?? '',
       sex: map['sex'] as String?,
       weightKg: _parseInt(map['weightKg']),
+      address: map['address'] as String?,
       userPhoneNumber: map['userPhoneNumber'] as String?,
       lastVisited: _parseDate(map['lastVisited']),
       createdAt: _parseDate(map['createdAt']) ?? DateTime.now(),

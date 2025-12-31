@@ -63,6 +63,7 @@ class _CompounderBookingCardState extends State<_CompounderBookingCard> {
   final TextEditingController _mobileController = TextEditingController();
   final TextEditingController _ageController = TextEditingController();
   final TextEditingController _aadhaarLast4Controller = TextEditingController();
+  final TextEditingController _addressController = TextEditingController();
 
   String? _selectedDateKey; // 'yyyy-MM-dd'
   String? _selectedTimeSlot; // morning/afternoon/evening
@@ -95,6 +96,7 @@ class _CompounderBookingCardState extends State<_CompounderBookingCard> {
     _mobileController.dispose();
     _ageController.dispose();
     _aadhaarLast4Controller.dispose();
+    _addressController.dispose();
     super.dispose();
   }
 
@@ -128,23 +130,51 @@ class _CompounderBookingCardState extends State<_CompounderBookingCard> {
       return;
     }
 
-    // Choose pay method
-    final method = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Select Payment Method'),
-        content: const Text('Choose how the patient paid'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, 'cash'),
-              child: const Text('Cash')),
-          ElevatedButton(
-              onPressed: () => Navigator.pop(ctx, 'online'),
-              child: const Text('Online')),
-        ],
-      ),
-    );
-    if (method == null) return;
+    // Validate mobile number for new patients - cannot be compounder's number
+    if (tokenId.isEmpty && mobile.contains('1234567890')) {
+      _showSnack(
+          'Invalid mobile number. Please enter a valid patient mobile number.',
+          Colors.red);
+      return;
+    }
+
+    // Check if token is valid (within 5 days) to skip payment
+    final db = locator<DatabaseService>();
+    bool skipPayment = false;
+    if (tokenId.isNotEmpty) {
+      final record = await db.getPatientByToken(tokenId);
+      if (record != null) {
+        final isValid = await db.isFeeValidWithinDays(
+          record,
+          days: 5,
+          referenceDate: date,
+        );
+        if (isValid) {
+          skipPayment = true;
+        }
+      }
+    }
+
+    // Only ask for payment method if payment is needed
+    String? method;
+    if (!skipPayment) {
+      method = await showDialog<String>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Select Payment Method'),
+          content: const Text('Choose how the patient paid'),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, 'cash'),
+                child: const Text('Cash')),
+            ElevatedButton(
+                onPressed: () => Navigator.pop(ctx, 'online'),
+                child: const Text('Online')),
+          ],
+        ),
+      );
+      if (method == null) return;
+    }
 
     setState(() => _isSubmitting = true);
     try {
@@ -160,14 +190,11 @@ class _CompounderBookingCardState extends State<_CompounderBookingCard> {
           final data = snap.docs.first.data();
           patientName = data['name'] ?? patientName;
           mobile = data['mobileNumber'] ?? mobile;
-          // Update lastVisited
-          await FirebaseFirestore.instance
-              .collection('patients')
-              .doc(tokenId)
-              .set({
-            'lastVisited': DateTime.now().toIso8601String(),
-            'updatedAt': DateTime.now().toIso8601String(),
-          }, SetOptions(merge: true));
+
+          // Only update lastVisited if payment is required (not valid within 5 days)
+          if (!skipPayment) {
+            await db.updatePatientLastVisited(tokenId, appointmentDate: date);
+          }
         }
       } else {
         // New patient: create token using database service (handles token limit check)
@@ -176,14 +203,16 @@ class _CompounderBookingCardState extends State<_CompounderBookingCard> {
         final userPhone = authViewModel.currentUser?.phoneNumber;
 
         // Use database service from DI container
-        final _db = locator<DatabaseService>();
+        final db = locator<DatabaseService>();
 
-        tokenId = await _db.createPatientAfterPayment(
+        tokenId = await db.createPatientAfterPayment(
           name: patientName,
           mobileNumber: mobile,
           age: age,
           aadhaarLast4: aadhaar4,
+          address: _addressController.text.trim(),
           userPhoneNumber: userPhone,
+          appointmentDate: date,
         );
       }
 
@@ -209,16 +238,20 @@ class _CompounderBookingCardState extends State<_CompounderBookingCard> {
         'createdAt': FieldValue.serverTimestamp(),
       });
 
-      // Log payment to compounder_pay
-      await _paymentService.addPaymentRecord(
-        patientToken: tokenId,
-        patientName: patientName,
-        mobileNumber: mobile,
-        age: age,
-        method: method,
-      );
-
-      _showSnack('Booked and logged payment ($method)', Colors.green);
+      // Log payment only if payment was required
+      if (!skipPayment) {
+        await _paymentService.addPaymentRecord(
+          patientToken: tokenId,
+          patientName: patientName,
+          mobileNumber: mobile,
+          age: age,
+          method: method!,
+        );
+        _showSnack('Booked and logged payment ($method)', Colors.green);
+      } else {
+        _showSnack('Booked successfully (no payment - valid within 5 days)',
+            Colors.green);
+      }
       _clearInputs();
     } catch (e) {
       _showSnack('Error: $e', Colors.red);
@@ -233,6 +266,7 @@ class _CompounderBookingCardState extends State<_CompounderBookingCard> {
     _mobileController.clear();
     _ageController.clear();
     _aadhaarLast4Controller.clear();
+    _addressController.clear();
     _selectedSeat = null;
   }
 
@@ -379,6 +413,14 @@ class _CompounderBookingCardState extends State<_CompounderBookingCard> {
                   ),
                 ),
               ]),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _addressController,
+                decoration: const InputDecoration(
+                    labelText: 'Address (max 30 characters)'),
+                maxLength: 30,
+                maxLines: 2,
+              ),
               const SizedBox(height: 8),
               SizedBox(
                 width: double.infinity,
@@ -886,11 +928,11 @@ class _TokenSearchScreenState extends State<_TokenSearchScreen> {
 
       // Search for tokens created by this user (userPhoneNumber)
       // Try with different phone formats
-      final phoneVariants = [
+      final phoneVariants = {
         phoneNumber,
         '+91$phoneNumber',
         phoneNumber.startsWith('+91') ? phoneNumber.substring(3) : phoneNumber,
-      ].toSet().toList();
+      }.toList();
 
       final userPhoneQuery = await FirebaseFirestore.instance
           .collection('patients')
@@ -908,6 +950,8 @@ class _TokenSearchScreenState extends State<_TokenSearchScreen> {
           'name': data['name'] ?? '',
           'age': data['age'] ?? '',
           'mobileNumber': data['mobileNumber'] ?? '',
+          'aadhaarLast4': data['aadhaarLast4'] ?? '',
+          'address': data['address'] ?? '',
           'userPhoneNumber': data['userPhoneNumber'] ?? '',
           'createdAt': data['createdAt'],
           'lastVisited': data['lastVisited'],
@@ -922,6 +966,8 @@ class _TokenSearchScreenState extends State<_TokenSearchScreen> {
           'name': data['name'] ?? '',
           'age': data['age'] ?? '',
           'mobileNumber': data['mobileNumber'] ?? '',
+          'aadhaarLast4': data['aadhaarLast4'] ?? '',
+          'address': data['address'] ?? '',
           'userPhoneNumber': data['userPhoneNumber'] ?? '',
           'createdAt': data['createdAt'],
           'lastVisited': data['lastVisited'],
@@ -1080,6 +1126,12 @@ class _TokenSearchScreenState extends State<_TokenSearchScreen> {
                                 Text('Name: ${token['name']}'),
                                 Text('Age: ${token['age']}'),
                                 Text('Patient Phone: ${token['mobileNumber']}'),
+                                if (token['aadhaarLast4'] != null &&
+                                    token['aadhaarLast4'].toString().isNotEmpty)
+                                  Text('Aadhaar: ${token['aadhaarLast4']}'),
+                                if (token['address'] != null &&
+                                    token['address'].toString().isNotEmpty)
+                                  Text('Address: ${token['address']}'),
                                 const SizedBox(height: 4),
                                 Text(
                                   creatorDisplay,
@@ -1107,7 +1159,7 @@ class _TokenSearchScreenState extends State<_TokenSearchScreen> {
                                   ),
                               ],
                             ),
-                            isThreeLine: true,
+                            isThreeLine: false,
                           ),
                         );
                       },

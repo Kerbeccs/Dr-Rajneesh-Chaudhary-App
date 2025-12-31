@@ -37,18 +37,21 @@ class ParchaPrintService {
       final sex = (p['sex'] ?? '').toString();
       final phone = (p['mobileNumber'] ?? '').toString();
       final token = (p['tokenId'] ?? '').toString();
+      final address = (p['address'] ?? '').toString();
 
-      // Get booking date from appointment database
-      String formattedDate = '';
-      String formattedExpiryDate = '';
-      DateTime? bookingDate;
+      // Get dates for parcha printing
+      String formattedAppointmentDate = ''; // Date for which booking is made
+      String formattedBookingDate = ''; // lastVisited (shown as booking date)
+      String formattedExpiryDate = ''; // lastVisited + 4 days
+      DateTime? appointmentDate;
+      DateTime? lastVisited;
 
-      // Try getting date from 'date' field first
+      // Get appointment date from appointment database
       final dateField = appointment['date'];
       if (dateField != null && dateField.toString().isNotEmpty) {
         try {
           if (dateField.toString().contains('-')) {
-            bookingDate = DateTime.parse(dateField.toString());
+            appointmentDate = DateTime.parse(dateField.toString());
           }
         } catch (e) {
           print('Error parsing date field: $e');
@@ -56,12 +59,13 @@ class ParchaPrintService {
       }
 
       // If 'date' didn't work, try 'appointmentDate' field
-      if (bookingDate == null) {
-        final appointmentDate = appointment['appointmentDate'];
-        if (appointmentDate != null && appointmentDate.toString().isNotEmpty) {
+      if (appointmentDate == null) {
+        final appointmentDateField = appointment['appointmentDate'];
+        if (appointmentDateField != null &&
+            appointmentDateField.toString().isNotEmpty) {
           try {
-            if (appointmentDate.toString().contains('-')) {
-              bookingDate = DateTime.parse(appointmentDate.toString());
+            if (appointmentDateField.toString().contains('-')) {
+              appointmentDate = DateTime.parse(appointmentDateField.toString());
             }
           } catch (e) {
             print('Error parsing appointmentDate: $e');
@@ -70,29 +74,54 @@ class ParchaPrintService {
       }
 
       // If still no date, try createdAt timestamp as fallback
-      if (bookingDate == null && appointment['createdAt'] != null) {
+      if (appointmentDate == null && appointment['createdAt'] != null) {
         try {
           final createdAt = appointment['createdAt'];
           if (createdAt is Timestamp) {
-            bookingDate = createdAt.toDate();
+            appointmentDate = createdAt.toDate();
           } else if (createdAt is DateTime) {
-            bookingDate = createdAt;
+            appointmentDate = createdAt;
           }
         } catch (e) {
           print('Error parsing createdAt: $e');
         }
       }
 
-      // Format the dates if we got a valid booking date
-      if (bookingDate != null) {
-        formattedDate = DateFormat('dd/MM/yyyy').format(bookingDate);
-        
-        // Calculate expiry date (+4 days)
-        // DateTime.add() automatically handles month boundaries
-        final expiryDate = bookingDate.add(const Duration(days: 4));
-        formattedExpiryDate = DateFormat('dd/MM/yyyy').format(expiryDate);
+      // Format appointment date
+      if (appointmentDate != null) {
+        formattedAppointmentDate =
+            DateFormat('dd/MM/yyyy').format(appointmentDate);
       } else {
-        formattedDate = 'N/A';
+        formattedAppointmentDate = 'N/A';
+      }
+
+      // Get lastVisited from patient record for booking date and expiry
+      try {
+        final lastVisitedField = p['lastVisited'];
+
+        if (lastVisitedField != null) {
+          if (lastVisitedField is Timestamp) {
+            lastVisited = lastVisitedField.toDate();
+          } else if (lastVisitedField is String) {
+            lastVisited = DateTime.parse(lastVisitedField);
+          } else if (lastVisitedField is DateTime) {
+            lastVisited = lastVisitedField;
+          }
+        }
+
+        if (lastVisited != null) {
+          // Booking date shows lastVisited
+          formattedBookingDate = DateFormat('dd/MM/yyyy').format(lastVisited);
+          // Expiry date is lastVisited + 4 days (5 days total validity)
+          final expiryDate = lastVisited.add(const Duration(days: 4));
+          formattedExpiryDate = DateFormat('dd/MM/yyyy').format(expiryDate);
+        } else {
+          formattedBookingDate = 'N/A';
+          formattedExpiryDate = 'N/A';
+        }
+      } catch (e) {
+        print('Error parsing lastVisited: $e');
+        formattedBookingDate = 'N/A';
         formattedExpiryDate = 'N/A';
       }
 
@@ -107,11 +136,12 @@ class ParchaPrintService {
       final ui.PictureRecorder recorder = ui.PictureRecorder();
       final ui.Canvas canvas = ui.Canvas(recorder);
       final paint = ui.Paint();
-      
+
       // Draw white background (same size as parcha.jpeg)
       paint.color = const ui.Color(0xFFFFFFFF); // White background
       canvas.drawRect(
-        Rect.fromLTWH(0, 0, baseImage.width.toDouble(), baseImage.height.toDouble()),
+        Rect.fromLTWH(
+            0, 0, baseImage.width.toDouble(), baseImage.height.toDouble()),
         paint,
       );
 
@@ -128,7 +158,8 @@ class ParchaPrintService {
           {double fontSize = 28,
           ui.Color color = const ui.Color(0xFF000000),
           ui.TextAlign align = ui.TextAlign.right,
-          double? maxWidth}) {
+          double? maxWidth,
+          double? leftX}) {
         final ui.ParagraphBuilder builder = ui.ParagraphBuilder(
           ui.ParagraphStyle(
             textAlign: align,
@@ -138,33 +169,64 @@ class ParchaPrintService {
         )
           ..pushStyle(ui.TextStyle(color: color))
           ..addText(text);
-        final width = maxWidth ?? (rightEdgeX - leftMargin);
+        final width = maxWidth ?? (rightEdgeX - (leftX ?? leftMargin));
         final ui.Paragraph paragraph = builder.build()
           ..layout(ui.ParagraphConstraints(width: width));
-        final drawX = rightEdgeX - width;
+        final drawX = leftX ?? (rightEdgeX - width);
         canvas.drawParagraph(paragraph, ui.Offset(drawX, y));
       }
 
       double startY = topPadding;
-      startY += gapY * 5;
+      startY += gapY * 5; // Moved down by one line
 
       // Token column at right edge, Phone on the left
       final double tokenColumnRightX = baseImage.width - rightMargin;
-      final double phoneRightX = tokenColumnRightX - tokenColumnWidth - columnGap;
+      final double phoneRightX =
+          tokenColumnRightX - tokenColumnWidth - columnGap;
 
       // Token and Phone on the same line
       textPainter('Phone: $phone', phoneRightX, startY,
           align: ui.TextAlign.right, maxWidth: phoneColumnWidth);
       textPainter('Token: $token', tokenColumnRightX, startY,
           align: ui.TextAlign.right, maxWidth: tokenColumnWidth);
-      startY += gapY;
+      startY += gapY * 1.5; // Increased gap between row 1 and row 2
 
-      // Booking Date, Expiry Date, Name, Age, Sex, Weight below token
-      textPainter('Booking Date: $formattedDate', tokenColumnRightX, startY,
-          align: ui.TextAlign.right, maxWidth: tokenColumnWidth);
-      startY += gapY;
-      textPainter('Expiry Date: $formattedExpiryDate', tokenColumnRightX, startY,
-          align: ui.TextAlign.right, maxWidth: tokenColumnWidth);
+      // Booking Date, Appointment Date, and Expiry Date in one row spanning full width
+      final double fullWidth = baseImage.width - leftMargin - rightMargin;
+      // Give more space to Appointment Date (40%), Booking and Expiry get 30% each
+      final double bookingDateWidth = fullWidth * 0.35;
+      final double appointmentDateWidth = fullWidth * 0.38;
+      final double expiryDateWidth = fullWidth * 0.30;
+      const double dateStartX = leftMargin;
+      // Shift appointment and expiry dates to the right to make room for booking date
+      const double rightShift = 20.0;
+
+      textPainter('Booking Date: $formattedBookingDate',
+          dateStartX + bookingDateWidth, startY,
+          align: ui.TextAlign.left,
+          maxWidth: bookingDateWidth,
+          leftX: dateStartX);
+      textPainter(
+          'Appointment Date: $formattedAppointmentDate',
+          dateStartX + bookingDateWidth + appointmentDateWidth + rightShift,
+          startY,
+          align: ui.TextAlign.left,
+          maxWidth: appointmentDateWidth,
+          leftX: dateStartX + bookingDateWidth + rightShift);
+      textPainter(
+          'Expiry Date: $formattedExpiryDate',
+          dateStartX +
+              bookingDateWidth +
+              appointmentDateWidth +
+              expiryDateWidth +
+              rightShift,
+          startY,
+          align: ui.TextAlign.left,
+          maxWidth: expiryDateWidth,
+          leftX: dateStartX +
+              bookingDateWidth +
+              appointmentDateWidth +
+              rightShift);
       startY += gapY;
       textPainter('Name: $name', tokenColumnRightX, startY,
           align: ui.TextAlign.right, maxWidth: tokenColumnWidth);
@@ -176,6 +238,14 @@ class ParchaPrintService {
           align: ui.TextAlign.right, maxWidth: tokenColumnWidth);
       startY += gapY;
       textPainter('Weight: $weight', tokenColumnRightX, startY,
+          align: ui.TextAlign.right, maxWidth: tokenColumnWidth);
+      startY += gapY;
+      // Address label on one line
+      textPainter('Address:', tokenColumnRightX, startY,
+          align: ui.TextAlign.right, maxWidth: tokenColumnWidth);
+      startY += gapY;
+      // Address text on next line (max 50 characters)
+      textPainter(address, tokenColumnRightX, startY,
           align: ui.TextAlign.right, maxWidth: tokenColumnWidth);
 
       final ui.Picture picture = recorder.endRecording();
@@ -202,4 +272,3 @@ class ParchaPrintService {
     }
   }
 }
-

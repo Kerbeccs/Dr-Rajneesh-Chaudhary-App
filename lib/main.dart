@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:flutter/foundation.dart';
@@ -16,7 +17,6 @@ import 'viewmodels/auth_viewmodel.dart';
 import 'viewmodels/booking_view_model.dart';
 import 'viewmodels/doctor_appointments_view_model.dart';
 import 'viewmodels/compounder_booking_view_model.dart';
-import 'viewmodels/report_view_model.dart';
 import 'viewmodels/patient_appointment_status_view_model.dart';
 import 'utils/locator.dart'; // Import DI setup
 
@@ -24,8 +24,10 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Initialize Firebase
-  await Firebase.initializeApp();
-  
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+
   // Initialize Dependency Injection
   // This sets up all service singletons that will be shared across the app
   // Prevents multiple instances and ensures consistent state
@@ -79,7 +81,7 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => AuthViewModel()),
         ChangeNotifierProvider(create: (_) => BookingViewModel()),
         ChangeNotifierProvider(create: (_) => DoctorAppointmentsViewModel()),
-        ChangeNotifierProvider(create: (_) => ReportViewModel()),
+        // ChangeNotifierProvider(create: (_) => ReportViewModel()),
         ChangeNotifierProvider(
             create: (_) => PatientAppointmentStatusViewModel()),
       ],

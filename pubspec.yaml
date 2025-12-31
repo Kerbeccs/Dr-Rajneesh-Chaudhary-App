@@ -1,7 +1,7 @@
 name: test_app
 description: Dr. Rajnish - Medical Appointment and Patient Management App
 publish_to: 'none'
-version: 1.0.9+10
+version: 1.0.13+14
 
 environment:
   sdk: ^3.5.4

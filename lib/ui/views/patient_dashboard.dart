@@ -4,12 +4,13 @@ import 'package:provider/provider.dart';
 import 'dart:async';
 import '../../viewmodels/auth_viewmodel.dart';
 import '../views/booking_screen.dart';
-import '../views/upload_report_screen.dart';
+// Removed unused imports for Upload Report, View Report, Edit Profile, and Feedback
+// import '../views/upload_report_screen.dart';
 import '../../viewmodels/ticket_view_model.dart';
 import '../../models/user_model.dart';
-import '../views/vd.dart';
-import '../views/edit_profile_screen.dart';
-import '../views/feedback_screen.dart';
+// import '../views/vd.dart';
+// import '../views/edit_profile_screen.dart';
+// import '../views/feedback_screen.dart';
 import '../../viewmodels/patient_appointment_status_view_model.dart';
 import '../views/ticket_details_screen.dart';
 import '../../viewmodels/booking_view_model.dart';
@@ -97,6 +98,7 @@ class _PatientDashboardState extends State<PatientDashboard> {
           children: [
             const _DashboardImage(),
             const _MenuGrid(),
+            const _DisclaimerCard(),
             _TokenIdListCard(key: _tokenListKey),
           ],
         ),
@@ -220,18 +222,20 @@ class _MenuGrid extends StatelessWidget {
         mainAxisSpacing: 20,
         crossAxisSpacing: 20,
         children: [
-          _MenuCard(
-            title: 'Upload Report',
-            icon: Icons.upload_file,
-            color: Colors.blue,
-            route: UploadReportScreen(),
-          ),
-          const _MenuCard(
-            title: 'View Report',
-            icon: Icons.upload_file_rounded,
-            color: Color.fromARGB(255, 9, 114, 125),
-            route: ViewDeleteReports(),
-          ),
+          // Removed: Upload Report
+          // _MenuCard(
+          //   title: 'Upload Report',
+          //   icon: Icons.upload_file,
+          //   color: Colors.blue,
+          //   route: UploadReportScreen(),
+          // ),
+          // Removed: View Report
+          // const _MenuCard(
+          //   title: 'View Report',
+          //   icon: Icons.upload_file_rounded,
+          //   color: Color.fromARGB(255, 9, 114, 125),
+          //   route: ViewDeleteReports(),
+          // ),
           _MenuCard(
             title: 'Book Appointment',
             icon: Icons.calendar_today,
@@ -245,21 +249,174 @@ class _MenuGrid extends StatelessWidget {
               child: const BookingScreen(),
             ),
           ),
-          const _MenuCard(
-            title: 'Feedback',
-            icon: Icons.feedback,
-            color: Colors.orange,
-            route: FeedbackScreen(),
-          ),
-          const _MenuCard(
-            title: 'Edit Profile',
-            icon: Icons.person_outline,
-            color: Colors.purple,
-            route: EditProfileScreen(),
-          ),
+          // Removed: Feedback
+          // const _MenuCard(
+          //   title: 'Feedback',
+          //   icon: Icons.feedback,
+          //   color: Colors.orange,
+          //   route: FeedbackScreen(),
+          // ),
+          // Removed: Edit Profile
+          // const _MenuCard(
+          //   title: 'Edit Profile',
+          //   icon: Icons.person_outline,
+          //   color: Colors.purple,
+          //   route: EditProfileScreen(),
+          // ),
           const _TicketMenuCard(),
         ],
       ),
+    );
+  }
+}
+
+// Disclaimer card in Hindi - Expandable/Collapsible
+class _DisclaimerCard extends StatefulWidget {
+  const _DisclaimerCard();
+
+  @override
+  State<_DisclaimerCard> createState() => _DisclaimerCardState();
+}
+
+class _DisclaimerCardState extends State<_DisclaimerCard>
+    with SingleTickerProviderStateMixin {
+  bool _isExpanded = false;
+  late AnimationController _animationController;
+  late Animation<double> _rotationAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _animationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
+    _rotationAnimation = Tween<double>(begin: 0.0, end: 0.5).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
+  }
+
+  void _toggleExpansion() {
+    setState(() {
+      _isExpanded = !_isExpanded;
+      if (_isExpanded) {
+        _animationController.forward();
+      } else {
+        _animationController.reverse();
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+      child: Card(
+        elevation: 2,
+        color: Colors.amber.shade50,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(color: Colors.amber.shade200, width: 1),
+        ),
+        child: Column(
+          children: [
+            // Clickable header
+            InkWell(
+              onTap: _toggleExpansion,
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(12)),
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline, color: Colors.amber.shade800),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'महत्वपूर्ण जानकारी',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.amber.shade900,
+                        ),
+                      ),
+                    ),
+                    RotationTransition(
+                      turns: _rotationAnimation,
+                      child: Icon(
+                        Icons.keyboard_arrow_down,
+                        color: Colors.amber.shade800,
+                        size: 28,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            // Expandable content
+            AnimatedCrossFade(
+              firstChild: const SizedBox.shrink(),
+              secondChild: Padding(
+                padding: const EdgeInsets.fromLTRB(16.0, 0, 16.0, 16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildPoint(
+                      'अगर आपके पास Token ID नहीं है :',
+                      'पहली बार बुकिंग करते समय "No" चुनें। पेशेंट की डिटेल्स भरते ही आपको Token ID स्क्रीन पे नीचे दिख जायेगा । एक ही फोन नंबर से आप परिवार के कई सदस्यों की ID बना सकते हैं।',
+                    ),
+                    const SizedBox(height: 12),
+                    _buildPoint(
+                      'अगर आपके पास Token ID है :',
+                      'एक बार Token ID मिलने के बाद वह नीचे दिखेगी। अगली बार बुकिंग के लिए "Yes" चुनें और सिर्फ वही ID डालें। कृपया एक पेशेंट के लिए एक ही ID का उपयोग करें; एक से अधिक ID बनाने पर असुविधा हो सकती है।',
+                    ),
+                  ],
+                ),
+              ),
+              crossFadeState: _isExpanded
+                  ? CrossFadeState.showSecond
+                  : CrossFadeState.showFirst,
+              duration: const Duration(milliseconds: 300),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPoint(String number, String text) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Flexible(
+          child: Text(
+            number,
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Colors.amber.shade900,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            text,
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.brown.shade800,
+              height: 1.5,
+            ),
+            softWrap: true,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -628,8 +785,9 @@ class _TokenIdListCardState extends State<_TokenIdListCard> {
               // Show cached data immediately, then update from stream
               Builder(
                 builder: (context) {
-                  final phone = context.read<AuthViewModel>().currentUser?.phoneNumber;
-                  
+                  final phone =
+                      context.read<AuthViewModel>().currentUser?.phoneNumber;
+
                   // If we have cached data and not refreshing, show it immediately
                   if (_cachedRecords != null && !_isRefreshing) {
                     return StreamBuilder<List<PatientRecord>>(
@@ -644,14 +802,16 @@ class _TokenIdListCardState extends State<_TokenIdListCard> {
                           shrinkWrap: true,
                           physics: const NeverScrollableScrollPhysics(),
                           itemCount: records.length,
-                          separatorBuilder: (_, __) => const Divider(height: 16),
+                          separatorBuilder: (_, __) =>
+                              const Divider(height: 16),
                           itemBuilder: (context, index) {
                             final r = records[index];
                             return ListTile(
                               contentPadding: EdgeInsets.zero,
                               leading: CircleAvatar(
                                 backgroundColor: Colors.blue.shade100,
-                                child: const Icon(Icons.tag, color: Colors.blue),
+                                child:
+                                    const Icon(Icons.tag, color: Colors.blue),
                               ),
                               title: Text(r.tokenId),
                               subtitle: Text('${r.name} • ${r.mobileNumber}'),

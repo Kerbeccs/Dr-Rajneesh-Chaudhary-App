@@ -130,7 +130,7 @@ class _SplashScreenState extends State<SplashScreen> {
             ),
             const SizedBox(height: 20),
             const Text(
-              'Dr. Rajneesh Chaudhary',
+              'Dr. Rajnish Chaudhary',
               style: TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,

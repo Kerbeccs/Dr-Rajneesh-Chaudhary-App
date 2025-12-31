@@ -1,6 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/user_model.dart';
-import '../models/report_model.dart';
 import '../models/booking_slot.dart';
 import '../models/feedback_model.dart';
 import '../models/patient_record.dart';
@@ -23,85 +22,81 @@ class DatabaseService {
   }
 
   // Reports Collection Methods
-  Future<String> addReport(ReportModel report) async {
-    try {
-      LoggingService.info('Adding report for patient: ${report.patientId}');
-      LoggingService.debug('Full report data: ${report.toMap()}');
+  // Future<String> addReport(ReportModel report) async {
+  //   try {
+  //     LoggingService.info('Adding report for patient: ${report.patientId}');
+  //     LoggingService.debug('Full report data: ${report.toMap()}');
 
-      final docRef = _db.collection('reports').doc();
-      final reportWithId = ReportModel(
-        reportId: docRef.id,
-        patientId: report.patientId,
-        description: report.description,
-        fileUrl: report.fileUrl,
-        uploadedAt: report.uploadedAt,
-      );
+  //     final docRef = _db.collection('reports').doc();
+  //     final reportWithId = ReportModel(
+  //       reportId: docRef.id,
+  //       patientId: report.patientId,
+  //       description: report.description,
+  //       fileUrl: report.fileUrl,
+  //       uploadedAt: report.uploadedAt,
+  //     );
 
-      await docRef.set(reportWithId.toMap());
-      LoggingService.info('Report saved with ID: ${docRef.id}');
-      return docRef.id;
-    } catch (e, st) {
-      LoggingService.error('Error saving report', e, st);
-      rethrow;
-    }
-  }
+  //     await docRef.set(reportWithId.toMap());
+  //     LoggingService.info('Report saved with ID: ${docRef.id}');
+  //     return docRef.id;
+  //   } catch (e, st) {
+  //     LoggingService.error('Error saving report', e, st);
+  //     rethrow;
+  //   }
+  // }
 
   // Fetch recent reports for a patient with an optional limit to control read volume.
-  Future<List<ReportModel>> getPatientReports(String patientId,
-      {int limit = 20}) async {
-    try {
-      LoggingService.debug('Fetching reports for patient ID: $patientId');
+  // Future<List<ReportModel>> getPatientReports(String patientId,
+  //     {int limit = 20}) async {
+  //   try {
+  //     LoggingService.debug('Fetching reports for patient ID: $patientId');
 
-      // First get the patient data to get the lastVisited field so it can be shown with reports
-      final patientDoc = await _db.collection('users').doc(patientId).get();
-      String? lastVisited;
+  //     // First get the patient data to get the lastVisited field so it can be shown with reports
+  //     final patientDoc = await _db.collection('users').doc(patientId).get();
+  //     String? lastVisited;
 
-      if (patientDoc.exists) {
-        final patientData = patientDoc.data();
-        lastVisited = patientData?['lastVisited'];
-        LoggingService.debug('Patient last visited: $lastVisited');
-      }
+  //     if (patientDoc.exists) {
+  //       final patientData = patientDoc.data();
+  //       lastVisited = patientData?['lastVisited'];
+  //       LoggingService.debug('Patient last visited: $lastVisited');
+  //     }
 
-      // Get recent reports for specific patient with a sane limit to reduce reads
-      final querySnapshot = await _db
-          .collection('reports')
-          .where('patientId', isEqualTo: patientId)
-          .orderBy('uploadedAt', descending: true)
-          .limit(limit)
-          .get();
+  //     // Get recent reports for specific patient with a sane limit to reduce reads
+  //     final querySnapshot = await _db
+  //         .collection('reports')
+  //         .where('patientId', isEqualTo: patientId)
+  //         .orderBy('uploadedAt', descending: true)
+  //         .limit(limit)
+  //         .get();
 
-      LoggingService.debug(
-          'Found ${querySnapshot.docs.length} reports for this patient');
+  //     LoggingService.debug(
+  //         'Found ${querySnapshot.docs.length} reports for this patient');
 
-      if (querySnapshot.docs.isNotEmpty) {
-        LoggingService.debug(
-            'Sample report data: ${querySnapshot.docs.first.data()}');
-      }
+  //     if (querySnapshot.docs.isNotEmpty) {
+  //       LoggingService.debug(
+  //           'Sample report data: ${querySnapshot.docs.first.data()}');
+  //     }
 
-      // Map the reports and include the lastVisited field
-      return querySnapshot.docs.map((doc) {
-        final reportData = doc.data();
-        return ReportModel(
-          reportId: reportData['reportId'] ?? '',
-          patientId: reportData['patientId'] ?? '',
-          description: reportData['description'] ?? '',
-          fileUrl: reportData['fileUrl'] ?? '',
-          uploadedAt: DateTime.parse(reportData['uploadedAt']),
-          lastVisited: lastVisited, // Include the lastVisited field
-        );
-      }).toList();
-    } catch (e) {
-      LoggingService.error('Error fetching reports', e, StackTrace.current);
-      return [];
-    }
-  }
+  //     // Map the reports and include the lastVisited field
+  //     return querySnapshot.docs.map((doc) {
+  //       final reportData = doc.data();
+  //       return ReportModel(
+  //         reportId: reportData['reportId'] ?? '',
+  //         patientId: reportData['patientId'] ?? '',
+  //         description: reportData['description'] ?? '',
+  //         fileUrl: reportData['fileUrl'] ?? '',
+  //         uploadedAt: DateTime.parse(reportData['uploadedAt']),
+  //         lastVisited: lastVisited, // Include the lastVisited field
+  //       );
+  //     }).toList();
+  //   } catch (e) {
+  //     LoggingService.error('Error fetching reports', e, StackTrace.current);
+  //     return [];
+  //   }
+  // }
 
   // Update last visited
-  Future<void> updateLastVisited(String patientId) async {
-    await _db.collection('users').doc(patientId).update({
-      'lastVisited': DateTime.now().toIso8601String(),
-    });
-  }
+  // Removed unused updateLastVisited function - replaced with updatePatientLastVisited
 
   Future<List<UserModel>> getAllPatients() async {
     try {
@@ -358,10 +353,21 @@ class DatabaseService {
       {int days = 5, DateTime? referenceDate}) async {
     if (record.lastVisited == null) return false;
     final checkDate = referenceDate ?? DateTime.now();
+
+    // Normalize dates to just date part (no time) for accurate day comparison
+    final normalizedCheckDate =
+        DateTime(checkDate.year, checkDate.month, checkDate.day);
+    final normalizedLastVisited = DateTime(
+      record.lastVisited!.year,
+      record.lastVisited!.month,
+      record.lastVisited!.day,
+    );
+
     // Check if within validity period (booking date as day 1, so <= days-1)
     // Example: days=5 means valid for 5 days total (0,1,2,3,4 days difference)
     // If booking for tomorrow, check validity on tomorrow, not today
-    return checkDate.difference(record.lastVisited!).inDays <= (days - 1);
+    return normalizedCheckDate.difference(normalizedLastVisited).inDays <=
+        (days - 1);
   }
 
   // Generate simple, unique, human-friendly token based on counter
@@ -397,6 +403,39 @@ class DatabaseService {
       return query.docs.length;
     } catch (e) {
       LoggingService.error('Error counting token IDs', e, StackTrace.current);
+      return 0;
+    }
+  }
+
+  /// Check how many token IDs exist for a mobile number (max 7 allowed)
+  Future<int> getTokenIdCountForMobile(String? mobileNumber) async {
+    if (mobileNumber == null || mobileNumber.isEmpty) {
+      return 0;
+    }
+
+    try {
+      // Build phone variants to match different formats
+      final variants = _buildPhoneVariants(mobileNumber);
+
+      // Count tokens where this number appears as either userPhoneNumber or mobileNumber
+      final userPhoneQuery =
+          await _patientsCol.where('userPhoneNumber', whereIn: variants).get();
+      final mobileQuery =
+          await _patientsCol.where('mobileNumber', whereIn: variants).get();
+
+      // Use Set to avoid double counting if a token has same number in both fields
+      final Set<String> uniqueTokenIds = {};
+      for (final doc in userPhoneQuery.docs) {
+        uniqueTokenIds.add(doc.id);
+      }
+      for (final doc in mobileQuery.docs) {
+        uniqueTokenIds.add(doc.id);
+      }
+
+      return uniqueTokenIds.length;
+    } catch (e) {
+      LoggingService.error(
+          'Error counting token IDs for mobile', e, StackTrace.current);
       return 0;
     }
   }
@@ -450,20 +489,36 @@ class DatabaseService {
     required String aadhaarLast4,
     String? sex,
     int? weightKg,
+    String? address,
     String? userPhoneNumber,
+    required DateTime appointmentDate,
   }) async {
     try {
-      // Check token ID limit (max 7 per user phone number)
-      // Skip limit check for compounder (phone number 1234567890)
-      if (userPhoneNumber != null && userPhoneNumber.isNotEmpty) {
-        // Check if this is the compounder's phone number (with or without country code)
-        final isCompounder = userPhoneNumber.contains('1234567890');
-        if (!isCompounder) {
-          final currentCount = await getTokenIdCountForUser(userPhoneNumber);
-          if (currentCount >= 7) {
+      // Enhanced token limit check (mobile number validation moved to UI layer)
+      final isCompounderUser =
+          userPhoneNumber != null && userPhoneNumber.contains('1234567890');
+
+      if (isCompounderUser) {
+        // Case 2: Compounder user - only check mobile number limit
+        final mobileCount = await getTokenIdCountForMobile(mobileNumber);
+        if (mobileCount >= 7) {
+          throw Exception(
+              'Maximum limit reached. The mobile number $mobileNumber already has 7 token IDs attached to it.');
+        }
+      } else {
+        // Case 1: Regular user - check both userPhoneNumber and mobileNumber limits
+        if (userPhoneNumber != null && userPhoneNumber.isNotEmpty) {
+          final userPhoneCount = await getTokenIdCountForUser(userPhoneNumber);
+          if (userPhoneCount >= 7) {
             throw Exception(
-                'Maximum limit reached. You can create only 7 token IDs per phone number. Please use an existing token ID or contact support.');
+                'Maximum limit reached. Your phone number already has 7 token IDs attached to it.');
           }
+        }
+
+        final mobileCount = await getTokenIdCountForMobile(mobileNumber);
+        if (mobileCount >= 7) {
+          throw Exception(
+              'Maximum limit reached. The mobile number $mobileNumber already has 7 token IDs attached to it.');
         }
       }
 
@@ -476,9 +531,11 @@ class DatabaseService {
         aadhaarLast4: aadhaarLast4,
         sex: sex,
         weightKg: weightKg,
+        address: address,
         userPhoneNumber: userPhoneNumber,
         createdAt: DateTime.now(),
-        lastVisited: DateTime.now(), // set on first successful payment
+        lastVisited:
+            appointmentDate, // set to appointment date (date for which booking is made)
         updatedAt: DateTime.now(),
       );
       await _patientsCol.doc(token).set(record.toMap());
@@ -490,10 +547,11 @@ class DatabaseService {
     }
   }
 
-  Future<void> updatePatientLastVisited(String tokenId) async {
+  Future<void> updatePatientLastVisited(String tokenId,
+      {required DateTime appointmentDate}) async {
     try {
       await _patientsCol.doc(tokenId).set({
-        'lastVisited': DateTime.now().toIso8601String(),
+        'lastVisited': appointmentDate.toIso8601String(),
         'updatedAt': DateTime.now().toIso8601String()
       }, SetOptions(merge: true));
     } catch (e) {

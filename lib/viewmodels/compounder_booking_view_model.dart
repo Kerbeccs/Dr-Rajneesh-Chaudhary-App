@@ -95,19 +95,25 @@ class CompounderBookingViewModel extends ChangeNotifier {
     required String mobile,
     required int age,
     required String aadhaarLast4,
+    String? address,
     String? userPhoneNumber,
+    required DateTime appointmentDate,
   }) async {
     return _db.createPatientAfterPayment(
       name: name,
       mobileNumber: mobile,
       age: age,
       aadhaarLast4: aadhaarLast4,
+      address: address,
       userPhoneNumber: userPhoneNumber,
+      appointmentDate: appointmentDate,
     );
   }
 
-  Future<void> _updateExistingPatientVisit(String tokenId) async {
-    await _db.updatePatientLastVisited(tokenId);
+  Future<void> _updateExistingPatientVisit(String tokenId,
+      {required DateTime appointmentDate}) async {
+    await _db.updatePatientLastVisited(tokenId,
+        appointmentDate: appointmentDate);
   }
 
   // Direct booking without payment (when fee is valid within 5 days)
@@ -196,8 +202,8 @@ class CompounderBookingViewModel extends ChangeNotifier {
         mobile = data['mobileNumber'] ?? mobile;
       }
 
-      // Update lastVisited when payment is made
-      await _updateExistingPatientVisit(tokenId);
+      // Update lastVisited when payment is made (with appointment date)
+      await _updateExistingPatientVisit(tokenId, appointmentDate: selectedDate);
       await _createAppointmentDocument(
         seatNumber: seatNumber,
         selectedDate: selectedDate,
@@ -239,6 +245,7 @@ class CompounderBookingViewModel extends ChangeNotifier {
     required String mobile,
     required int age,
     required String aadhaarLast4,
+    String? address,
     required int seatNumber,
     required DateTime selectedDate,
     required String selectedTimeSlotKey,
@@ -258,7 +265,9 @@ class CompounderBookingViewModel extends ChangeNotifier {
         mobile: mobile,
         age: age,
         aadhaarLast4: aadhaarLast4,
+        address: address,
         userPhoneNumber: userPhoneNumber,
+        appointmentDate: selectedDate,
       );
 
       await _createAppointmentDocument(

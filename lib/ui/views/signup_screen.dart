@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../viewmodels/auth_viewmodel.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../services/password_service.dart';
 
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
@@ -98,31 +99,33 @@ class _SignupScreenState extends State<SignupScreen> {
     try {
       // Send OTP and wait for result
       await authViewModel.sendOtpForSignup(phoneController.text.trim());
-      
+
       // Wait for Firebase callback to complete (polling with timeout)
       // Give Firebase enough time to process the request before checking for errors
       bool otpSent = false;
       String? finalError;
-      
+
       // Wait up to 5 seconds (50 * 100ms) for Firebase to respond
       for (int i = 0; i < 50; i++) {
         await Future.delayed(const Duration(milliseconds: 100));
-        
+
         // If OTP was sent successfully, break immediately
         if (authViewModel.otpSent) {
           otpSent = true;
           finalError = null; // Clear any temporary errors
           break;
         }
-        
+
         // Only check for errors after waiting at least 1 second (10 iterations)
         // This prevents showing temporary errors that Firebase clears when OTP is sent
-        if (i >= 10 && authViewModel.phoneAuthError != null && !authViewModel.otpSent) {
+        if (i >= 10 &&
+            authViewModel.phoneAuthError != null &&
+            !authViewModel.otpSent) {
           finalError = authViewModel.phoneAuthError;
           // Continue checking in case OTP gets sent after error is cleared
         }
       }
-      
+
       // Final check: if OTP was sent, use that; otherwise use the error
       if (authViewModel.otpSent) {
         otpSent = true;
@@ -130,7 +133,7 @@ class _SignupScreenState extends State<SignupScreen> {
       } else if (finalError == null && authViewModel.phoneAuthError != null) {
         finalError = authViewModel.phoneAuthError;
       }
-      
+
       // Check if OTP was sent successfully
       if (otpSent) {
         // OTP sent successfully, show OTP field
@@ -194,10 +197,13 @@ class _SignupScreenState extends State<SignupScreen> {
 
       if (user != null) {
         int? age = int.tryParse(ageController.text);
+        // Hash password before storing for security
+        final passwordHash =
+            PasswordService.hashPassword(passwordController.text);
         await firestore.collection('users').doc(user.uid).set({
           'uid': user.uid,
           'phoneNumber': formattedPhone,
-          'password': passwordController.text, // Store password for login
+          'passwordHash': passwordHash, // Store hashed password for security
           'patientName': nameController.text.trim(),
           'age': age ?? 0,
           'role': 'patient',

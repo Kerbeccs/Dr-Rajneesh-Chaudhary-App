@@ -25,6 +25,7 @@ class _CompounderBookingScreenState extends State<CompounderBookingScreen> {
   final TextEditingController _mobileController = TextEditingController();
   final TextEditingController _ageController = TextEditingController();
   final TextEditingController _aadhaarLast4Controller = TextEditingController();
+  final TextEditingController _addressController = TextEditingController();
 
   final DatabaseService _db = locator<DatabaseService>();
 
@@ -46,6 +47,7 @@ class _CompounderBookingScreenState extends State<CompounderBookingScreen> {
     _mobileController.dispose();
     _ageController.dispose();
     _aadhaarLast4Controller.dispose();
+    _addressController.dispose();
     super.dispose();
   }
 
@@ -148,11 +150,21 @@ class _CompounderBookingScreenState extends State<CompounderBookingScreen> {
         // New patient always requires payment
         final age = int.tryParse(_ageController.text.trim()) ?? 0;
         final aadhaar = _aadhaarLast4Controller.text.trim();
+        final mobile = _mobileController.text.trim();
+
         if (_nameController.text.trim().isEmpty ||
-            _mobileController.text.trim().isEmpty ||
+            mobile.isEmpty ||
             age <= 0 ||
             aadhaar.length != 4) {
           _snack('Please fill all details for new patient', Colors.red);
+          return;
+        }
+
+        // Validate mobile number - cannot be compounder's number
+        if (mobile.contains('1234567890')) {
+          _snack(
+              'Invalid mobile number. Please enter a valid patient mobile number.',
+              Colors.red);
           return;
         }
         // Get user phone number for token limit check
@@ -165,6 +177,7 @@ class _CompounderBookingScreenState extends State<CompounderBookingScreen> {
           mobile: _mobileController.text.trim(),
           age: age,
           aadhaarLast4: aadhaar,
+          address: _addressController.text.trim(),
           seatNumber: _selectedSeat!,
           selectedDate: date,
           selectedTimeSlotKey: _selectedTimeSlot!,
@@ -316,6 +329,14 @@ class _CompounderBookingScreenState extends State<CompounderBookingScreen> {
                 ),
               ),
             ]),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _addressController,
+              decoration: const InputDecoration(
+                  labelText: 'Address (max 30 characters)'),
+              maxLength: 30,
+              maxLines: 2,
+            ),
             const SizedBox(height: 12),
             SizedBox(
               width: double.infinity,

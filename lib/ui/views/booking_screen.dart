@@ -181,8 +181,9 @@ class _BookingScreenState extends State<BookingScreen> {
       String patientName;
 
       if (_pendingExistingTokenId != null) {
-        // Existing patient: update lastVisited
-        await _db.updatePatientLastVisited(_pendingExistingTokenId!);
+        // Existing patient: update lastVisited with appointment date
+        await _db.updatePatientLastVisited(_pendingExistingTokenId!,
+            appointmentDate: selectedDate);
         final record = await _db.getPatientByToken(_pendingExistingTokenId!);
         if (record == null) {
           throw Exception('Patient record not found after payment');
@@ -198,9 +199,11 @@ class _BookingScreenState extends State<BookingScreen> {
           aadhaarLast4: _pendingNewPatientData!['aadhaarLast4'] as String,
           sex: _pendingNewPatientData!['sex'] as String?,
           weightKg: _pendingNewPatientData!['weightKg'] as int?,
+          address: _pendingNewPatientData!['address'] as String?,
           userPhoneNumber: Provider.of<AuthViewModel>(context, listen: false)
               .currentUser
               ?.phoneNumber,
+          appointmentDate: selectedDate,
         );
         patientName = _pendingNewPatientData!['name'] as String;
       } else {
@@ -286,7 +289,22 @@ class _BookingScreenState extends State<BookingScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Patient Identification'),
-        content: const Text('Do you have a patient token ID?'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Do you have a patient token ID?'),
+            const SizedBox(height: 8),
+            Text(
+              'क्या आपके पास token ID है?',
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey.shade700,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -343,8 +361,8 @@ class _BookingScreenState extends State<BookingScreen> {
         days: 5,
         referenceDate: selectedDate,
       );
-      // In compounder mode, always ask for payment method and log, even if fee is valid
-      if (widget.isCompounderMode || !isValid) {
+      // Ask for payment only if token is not valid (expired)
+      if (!isValid) {
         _pendingExistingTokenId = tokenId;
         _pendingNewPatientData = null;
         _pendingSlot = slot;
@@ -353,7 +371,7 @@ class _BookingScreenState extends State<BookingScreen> {
         await _initiatePayment(slot, patientNameOverride: record.name);
         return;
       }
-      // Non-compounder and valid within days: skip payment
+      // Valid token (within 5 days): skip payment for both patient and compounder
       try {
         await _createAppointmentDocument(
           slot: slot,
@@ -379,6 +397,7 @@ class _BookingScreenState extends State<BookingScreen> {
       final ageCtrl = TextEditingController();
       final aadhaarCtrl = TextEditingController();
       final weightCtrl = TextEditingController();
+      final addressCtrl = TextEditingController();
       String sexValue = 'M';
 
       final proceed = await showDialog<bool>(
@@ -454,6 +473,13 @@ class _BookingScreenState extends State<BookingScreen> {
                       maxLength: 4,
                       keyboardType: TextInputType.number,
                     ),
+                    TextField(
+                      controller: addressCtrl,
+                      decoration: const InputDecoration(
+                          labelText: 'Address (max 30 characters)'),
+                      maxLength: 30,
+                      maxLines: 2,
+                    ),
                   ],
                 ),
               );
@@ -477,11 +503,19 @@ class _BookingScreenState extends State<BookingScreen> {
       final age = int.tryParse(ageCtrl.text.trim()) ?? 0;
       final weight = int.tryParse(weightCtrl.text.trim());
       final aadhaarLast4 = aadhaarCtrl.text.trim();
+      final mobile = mobileCtrl.text.trim();
+      
       if (nameCtrl.text.trim().isEmpty ||
-          mobileCtrl.text.trim().isEmpty ||
+          mobile.isEmpty ||
           age <= 0 ||
           aadhaarLast4.length != 4) {
         _showErrorSnackBar('Please fill all fields correctly.');
+        return;
+      }
+
+      // Validate mobile number - cannot be compounder's number
+      if (mobile.contains('1234567890')) {
+        _showErrorSnackBar('Invalid mobile number. Please enter a valid patient mobile number.');
         return;
       }
 
@@ -521,6 +555,7 @@ class _BookingScreenState extends State<BookingScreen> {
         // Map 'M'/'F' chips to 'male'/'female' strings
         'sex': sexValue == 'M' ? 'male' : 'female',
         'weightKg': weight,
+        'address': addressCtrl.text.trim(),
       };
       _pendingSlot = slot;
       _pendingDate = selectedDate;
@@ -605,7 +640,8 @@ class _BookingScreenState extends State<BookingScreen> {
       int age = 0;
 
       if (_pendingExistingTokenId != null) {
-        await _db.updatePatientLastVisited(_pendingExistingTokenId!);
+        await _db.updatePatientLastVisited(_pendingExistingTokenId!,
+            appointmentDate: selectedDate);
         final record = await _db.getPatientByToken(_pendingExistingTokenId!);
         if (record == null) {
           throw Exception('Patient record not found after payment');
@@ -621,9 +657,11 @@ class _BookingScreenState extends State<BookingScreen> {
           aadhaarLast4: _pendingNewPatientData!['aadhaarLast4'] as String,
           sex: _pendingNewPatientData!['sex'] as String?,
           weightKg: _pendingNewPatientData!['weightKg'] as int?,
+          address: _pendingNewPatientData!['address'] as String?,
           userPhoneNumber: Provider.of<AuthViewModel>(context, listen: false)
               .currentUser
               ?.phoneNumber,
+          appointmentDate: selectedDate,
         );
         patientName = _pendingNewPatientData!['name'] as String;
         mobile = _pendingNewPatientData!['mobile'] as String;
