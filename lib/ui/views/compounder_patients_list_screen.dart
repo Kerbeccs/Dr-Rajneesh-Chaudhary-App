@@ -4,7 +4,8 @@ import 'package:intl/intl.dart';
 import 'dart:ui' as ui;
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
-import 'dart:io';
+import 'dart:io' if (dart.library.html) 'dart:html' as io;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:share_plus/share_plus.dart';
 
 class CompounderPatientsListScreen extends StatefulWidget {
@@ -117,13 +118,24 @@ class _CompounderPatientsListScreenState
         return;
       }
 
-      // 4) Save to temporary file
-      final dir = await getTemporaryDirectory();
-      final file = File('${dir.path}/parcha_$token.png');
-      await file.writeAsBytes(pngBytes.buffer.asUint8List(), flush: true);
+      final Uint8List imageBytes = pngBytes.buffer.asUint8List();
 
-      // 5) Share
-      await Share.shareXFiles([XFile(file.path)], text: 'Patient Details');
+      // 4) Share - use different approach for web vs mobile
+      if (kIsWeb) {
+        // For web: Use XFile.fromData() which works without file system
+        final xFile = XFile.fromData(
+          imageBytes,
+          mimeType: 'image/png',
+          name: 'parcha_$token.png',
+        );
+        await Share.shareXFiles([xFile], text: 'Patient Details');
+      } else {
+        // For mobile: Save to temporary file
+        final dir = await getTemporaryDirectory();
+        final file = io.File('${dir.path}/parcha_$token.png');
+        await file.writeAsBytes(imageBytes, flush: true);
+        await Share.shareXFiles([XFile(file.path)], text: 'Patient Details');
+      }
     } catch (e) {
       _showSnack('Print failed: $e');
     }
