@@ -33,40 +33,59 @@ void main() async {
   // Prevents multiple instances and ensures consistent state
   setupLocator();
 
-  // Initialize Firebase App Check (required for Play Store builds)
-  // This enables Play Integrity API for production and Debug provider for development
-  try {
-    await FirebaseAppCheck.instance.activate(
-      androidProvider: kDebugMode
-          ? AndroidProvider.debug // Use debug provider for local testing
-          : AndroidProvider
-              .playIntegrity, // Use Play Integrity for Play Store builds
-    );
-  } catch (e) {
-    // If App Check fails (e.g., debug token not set, Play Integrity not available),
-    // continue without App Check - Firebase Auth will still work but with reduced security
-    // This is acceptable for local testing
-    if (kDebugMode) {
-      print('Firebase App Check initialization failed: $e');
-      print('Continuing without App Check (acceptable for local testing)');
+  // Initialize Firebase App Check (Android/iOS only, not supported on web)
+  if (!kIsWeb) {
+    try {
+      await FirebaseAppCheck.instance.activate(
+        androidProvider: kDebugMode
+            ? AndroidProvider.debug // Use debug provider for local testing
+            : AndroidProvider
+                .playIntegrity, // Use Play Integrity for Play Store builds
+      );
+    } catch (e) {
+      // If App Check fails (e.g., debug token not set, Play Integrity not available),
+      // continue without App Check - Firebase Auth will still work but with reduced security
+      // This is acceptable for local testing
+      if (kDebugMode) {
+        print('Firebase App Check initialization failed: $e');
+        print('Continuing without App Check (acceptable for local testing)');
+      }
     }
   }
 
-  // Initialize Crashlytics
-  FlutterError.onError = (errorDetails) {
-    // Pass Flutter errors to Crashlytics
-    FirebaseCrashlytics.instance.recordFlutterFatalError(errorDetails);
-  };
+  // Initialize Crashlytics (Android/iOS only, not supported on web)
+  if (!kIsWeb) {
+    FlutterError.onError = (errorDetails) {
+      // Pass Flutter errors to Crashlytics
+      FirebaseCrashlytics.instance.recordFlutterFatalError(errorDetails);
+    };
 
-  // Pass non-Flutter errors to Crashlytics
-  PlatformDispatcher.instance.onError = (error, stack) {
-    FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
-    return true;
-  };
+    // Pass non-Flutter errors to Crashlytics
+    PlatformDispatcher.instance.onError = (error, stack) {
+      FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+      return true;
+    };
 
-  // Enable Crashlytics collection (only in release mode)
-  await FirebaseCrashlytics.instance
-      .setCrashlyticsCollectionEnabled(!kDebugMode);
+    // Enable Crashlytics collection (only in release mode)
+    await FirebaseCrashlytics.instance
+        .setCrashlyticsCollectionEnabled(!kDebugMode);
+  } else {
+    // For web, just log errors to console
+    FlutterError.onError = (errorDetails) {
+      if (kDebugMode) {
+        print('Flutter Error: ${errorDetails.exception}');
+        print('Stack: ${errorDetails.stack}');
+      }
+    };
+
+    PlatformDispatcher.instance.onError = (error, stack) {
+      if (kDebugMode) {
+        print('Platform Error: $error');
+        print('Stack: $stack');
+      }
+      return true;
+    };
+  }
 
   runApp(const MyApp());
 }
