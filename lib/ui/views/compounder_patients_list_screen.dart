@@ -4,7 +4,7 @@ import 'package:intl/intl.dart';
 import 'dart:ui' as ui;
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
-import 'dart:io' if (dart.library.html) 'dart:html' as io;
+import 'dart:io' if (dart.library.html) 'package:test_app/utils/file_stub.dart' show File;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:share_plus/share_plus.dart';
 
@@ -132,7 +132,7 @@ class _CompounderPatientsListScreenState
       } else {
         // For mobile: Save to temporary file
         final dir = await getTemporaryDirectory();
-        final file = io.File('${dir.path}/parcha_$token.png');
+        final file = File('${dir.path}/parcha_$token.png');
         await file.writeAsBytes(imageBytes, flush: true);
         await Share.shareXFiles([XFile(file.path)], text: 'Patient Details');
       }

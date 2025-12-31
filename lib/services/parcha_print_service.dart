@@ -1,7 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/services.dart';
 import 'dart:ui' as ui;
-import 'dart:io' if (dart.library.html) 'dart:html' as io;
+import 'dart:io' if (dart.library.html) 'package:test_app/utils/file_stub.dart' show File;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -275,7 +275,7 @@ class ParchaPrintService {
       } else {
         // For mobile: Save to temporary file
         final dir = await getTemporaryDirectory();
-        final file = io.File('${dir.path}/parcha_$token.png');
+        final file = File('${dir.path}/parcha_$token.png');
         await file.writeAsBytes(imageBytes, flush: true);
         await Share.shareXFiles([XFile(file.path)], text: 'Patient Details');
       }
