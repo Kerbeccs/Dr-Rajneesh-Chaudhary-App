@@ -23,8 +23,9 @@ class _CompounderBookingScreenState extends State<CompounderBookingScreen> {
   final TextEditingController _tokenController = TextEditingController();
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _mobileController = TextEditingController();
-  final TextEditingController _ageController = TextEditingController();
-  final TextEditingController _aadhaarLast4Controller = TextEditingController();
+  final TextEditingController _ageYearsController = TextEditingController();
+  final TextEditingController _ageMonthsController = TextEditingController();
+  final TextEditingController _ageDaysController = TextEditingController();
   final TextEditingController _addressController = TextEditingController();
 
   final DatabaseService _db = locator<DatabaseService>();
@@ -45,8 +46,9 @@ class _CompounderBookingScreenState extends State<CompounderBookingScreen> {
     _tokenController.dispose();
     _nameController.dispose();
     _mobileController.dispose();
-    _ageController.dispose();
-    _aadhaarLast4Controller.dispose();
+    _ageYearsController.dispose();
+    _ageMonthsController.dispose();
+    _ageDaysController.dispose();
     _addressController.dispose();
     super.dispose();
   }
@@ -148,14 +150,14 @@ class _CompounderBookingScreenState extends State<CompounderBookingScreen> {
         }
       } else {
         // New patient always requires payment
-        final age = int.tryParse(_ageController.text.trim()) ?? 0;
-        final aadhaar = _aadhaarLast4Controller.text.trim();
+        final ageYears = int.tryParse(_ageYearsController.text.trim()) ?? 0;
+        final ageMonths = int.tryParse(_ageMonthsController.text.trim()) ?? 0;
+        final ageDays = int.tryParse(_ageDaysController.text.trim()) ?? 0;
         final mobile = _mobileController.text.trim();
 
         if (_nameController.text.trim().isEmpty ||
             mobile.isEmpty ||
-            age <= 0 ||
-            aadhaar.length != 4) {
+            (ageYears == 0 && ageMonths == 0 && ageDays == 0)) {
           _snack('Please fill all details for new patient', Colors.red);
           return;
         }
@@ -175,8 +177,9 @@ class _CompounderBookingScreenState extends State<CompounderBookingScreen> {
         await compounderVm.bookForNewPatient(
           name: _nameController.text.trim(),
           mobile: _mobileController.text.trim(),
-          age: age,
-          aadhaarLast4: aadhaar,
+          ageYears: ageYears,
+          ageMonths: ageMonths,
+          ageDays: ageDays,
           address: _addressController.text.trim(),
           seatNumber: _selectedSeat!,
           selectedDate: date,
@@ -196,8 +199,10 @@ class _CompounderBookingScreenState extends State<CompounderBookingScreen> {
     _tokenController.clear();
     _nameController.clear();
     _mobileController.clear();
-    _ageController.clear();
-    _aadhaarLast4Controller.clear();
+    _ageYearsController.clear();
+    _ageMonthsController.clear();
+    _ageDaysController.clear();
+    _addressController.clear();
     setState(() {
       _selectedSeat = null;
     });
@@ -313,18 +318,24 @@ class _CompounderBookingScreenState extends State<CompounderBookingScreen> {
             Row(children: [
               Expanded(
                 child: TextField(
-                  controller: _ageController,
-                  decoration: const InputDecoration(labelText: 'Age'),
+                  controller: _ageYearsController,
+                  decoration: const InputDecoration(labelText: 'Years'),
                   keyboardType: TextInputType.number,
                 ),
               ),
               const SizedBox(width: 8),
               Expanded(
                 child: TextField(
-                  controller: _aadhaarLast4Controller,
-                  decoration:
-                      const InputDecoration(labelText: 'Aadhaar Last 4'),
-                  maxLength: 4,
+                  controller: _ageMonthsController,
+                  decoration: const InputDecoration(labelText: 'Months'),
+                  keyboardType: TextInputType.number,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextField(
+                  controller: _ageDaysController,
+                  decoration: const InputDecoration(labelText: 'Days'),
                   keyboardType: TextInputType.number,
                 ),
               ),

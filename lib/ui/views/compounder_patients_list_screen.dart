@@ -47,12 +47,21 @@ class _CompounderPatientsListScreenState
       final p = patSnap.docs.first.data();
 
       final name = (p['name'] ?? '').toString();
-      final age = (p['age'] ?? '').toString();
+      // Handle age: new format (ageYears/ageMonths/ageDays) or old format (age)
+      String ageStr = '';
+      if (p['ageYears'] != null || p['ageMonths'] != null || p['ageDays'] != null) {
+        final years = (p['ageYears'] ?? 0).toString();
+        final months = (p['ageMonths'] ?? 0).toString();
+        final days = (p['ageDays'] ?? 0).toString();
+        ageStr = '$years years $months months $days days';
+      } else if (p['age'] != null) {
+        // Backward compatibility: old format
+        ageStr = '${p['age']} years';
+      }
       final weight = (p['weightKg'] ?? '').toString();
       final sex = (p['sex'] ?? '').toString();
       final phone = (p['mobileNumber'] ?? '').toString();
       final token = (p['tokenId'] ?? '').toString();
-      final aadhaar = (p['aadhaarLast4'] ?? '').toString();
 
       // 2) Load base image from assets
       final byteData = await rootBundle.load('assets/logos/parcha.jpg');
@@ -96,13 +105,11 @@ class _CompounderPatientsListScreenState
       startY += gapY;
       textPainter('Name: $name', startX, startY);
       startY += gapY;
-      textPainter('Age: $age', startX, startY);
+      textPainter('Age: $ageStr', startX, startY);
       startY += gapY;
       textPainter('Weight: $weight', startX, startY);
       startY += gapY;
       textPainter('Sex: $sex', startX, startY);
-      startY += gapY;
-      textPainter('Aadhaar: $aadhaar', startX, startY);
       startY += gapY;
       textPainter('Phone: $phone', startX, startY);
 

@@ -204,9 +204,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
                           _buildInfoRow('Name', _patient.name),
                           _buildInfoRow('Token ID', _patient.tokenId),
                           _buildInfoRow('Mobile', _patient.mobileNumber),
-                          _buildInfoRow('Age', '${_patient.age} years'),
-                          _buildInfoRow(
-                              'Aadhaar Last 4', _patient.aadhaarLast4),
+                          _buildInfoRow('Age', '${_patient.ageYears} years ${_patient.ageMonths} months ${_patient.ageDays} days'),
                           if (_patient.lastVisited != null)
                             _buildInfoRow(
                               'Last Fee Paid',

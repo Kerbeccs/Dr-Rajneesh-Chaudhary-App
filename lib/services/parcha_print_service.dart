@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'dart:ui' as ui;
 import 'dart:io' if (dart.library.html) 'package:test_app/utils/file_stub.dart'
     show File;
-import 'dart:html' if (dart.library.io) 'dart:io' as html;
+import 'dart:html' if (dart.library.io) 'package:test_app/utils/html_stub.dart' as html;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -35,13 +35,26 @@ class ParchaPrintService {
       final p = patSnap.docs.first.data();
 
       final name = (p['name'] ?? '').toString();
-      final age = (p['age'] ?? '').toString();
+      // Handle age: new format (ageYears/ageMonths/ageDays) or old format (age)
+      String ageStr = '';
+      if (p['ageYears'] != null || p['ageMonths'] != null || p['ageDays'] != null) {
+        final years = (p['ageYears'] ?? 0).toString();
+        final months = (p['ageMonths'] ?? 0).toString();
+        final days = (p['ageDays'] ?? 0).toString();
+        ageStr = '$years years $months months $days days';
+      } else if (p['age'] != null) {
+        // Backward compatibility: old format
+        ageStr = '${p['age']} years';
+      }
       final weight = (p['weightKg'] ?? '').toString();
       final sex = (p['sex'] ?? '').toString();
       final phone = (p['mobileNumber'] ?? '').toString();
       final token = (p['tokenId'] ?? '').toString();
       final address = (p['address'] ?? '').toString();
 
+      // Get seat number from appointment
+      final seatNumber = appointment['seatNumber']?.toString() ?? '';
+      
       // Get dates for parcha printing
       String formattedAppointmentDate = ''; // Date for which booking is made
       String formattedBookingDate = ''; // lastVisited (shown as booking date)
@@ -186,8 +199,14 @@ class ParchaPrintService {
       final double tokenColumnRightX = baseImage.width - rightMargin;
       final double phoneRightX =
           tokenColumnRightX - tokenColumnWidth - columnGap;
+      const double seatColumnWidth = 120; // Increased width to handle 2-digit seat numbers
+      final double seatRightX = phoneRightX - phoneColumnWidth - seatColumnWidth - 10;
 
-      // Token and Phone on the same line
+      // Seat, Phone, and Token on the same line (if seat number is available)
+      if (seatNumber.isNotEmpty) {
+        textPainter('Seat: $seatNumber', seatRightX, startY,
+            align: ui.TextAlign.right, maxWidth: seatColumnWidth);
+      }
       textPainter('Phone: $phone', phoneRightX, startY,
           align: ui.TextAlign.right, maxWidth: phoneColumnWidth);
       textPainter('Token: $token', tokenColumnRightX, startY,
@@ -217,7 +236,7 @@ class ParchaPrintService {
           maxWidth: appointmentDateWidth,
           leftX: dateStartX + bookingDateWidth + rightShift);
       textPainter(
-          'Expiry Date: $formattedExpiryDate',
+          'Valid till: $formattedExpiryDate',
           dateStartX +
               bookingDateWidth +
               appointmentDateWidth +
@@ -234,7 +253,7 @@ class ParchaPrintService {
       textPainter('Name: $name', tokenColumnRightX, startY,
           align: ui.TextAlign.right, maxWidth: tokenColumnWidth);
       startY += gapY;
-      textPainter('Age: $age', tokenColumnRightX, startY,
+      textPainter('Age: $ageStr', tokenColumnRightX, startY,
           align: ui.TextAlign.right, maxWidth: tokenColumnWidth);
       startY += gapY;
       textPainter('Sex: $sex', tokenColumnRightX, startY,
@@ -267,88 +286,91 @@ class ParchaPrintService {
 
       // 4) Share - use different approach for web vs mobile
       if (kIsWeb) {
-        // For web: Use browser print dialog (more reliable than share API for printing)
+        // For web: Create HTML page with print styles to suppress browser headers/footers
         try {
-          // Create blob and data URL for the image
-          final blob = html.Blob([imageBytes], 'image/png');
-          final url = html.Url.createObjectUrlFromBlob(blob);
-
-          // Convert image bytes to base64 data URL for embedding in HTML
-          final base64Image =
-              Uri.dataFromBytes(imageBytes, mimeType: 'image/png').toString();
-
-          // Create HTML content with embedded image
+          // Convert image to base64 data URL for embedding
+          final base64Image = Uri.dataFromBytes(imageBytes, mimeType: 'image/png').toString();
+          
+          // Create HTML content with print-specific CSS to remove headers/footers
           final htmlContent = '''
-            <!DOCTYPE html>
-            <html>
-              <head>
-                <title>Print Patient Details - Token $token</title>
-                <style>
-                  @media print {
-                    body { 
-                      margin: 0; 
-                      padding: 0;
-                    }
-                    img { 
-                      width: 100%; 
-                      height: auto;
-                      display: block;
-                    }
-                  }
-                  @media screen {
-                    body {
-                      margin: 20px;
-                      text-align: center;
-                    }
-                    img {
-                      max-width: 100%;
-                      height: auto;
-                      border: 1px solid #ccc;
-                    }
-                  }
-                </style>
-              </head>
-              <body>
-                <img src="$base64Image" alt="Patient Details - Token $token" />
-                <script>
-                  window.onload = function() {
-                    // Small delay to ensure image is loaded
-                    setTimeout(function() {
-                      window.print();
-                      // Close window after print dialog is closed
-                      window.onafterprint = function() {
-                        window.close();
-                      };
-                    }, 250);
-                  };
-                </script>
-              </body>
-            </html>
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Print Patient Details - Token $token</title>
+    <style>
+      @page {
+        size: auto;
+        margin: 0;
+      }
+      @media print {
+        body {
+          margin: 0;
+          padding: 0;
+        }
+        img {
+          width: 100%;
+          height: auto;
+          display: block;
+          page-break-inside: avoid;
+          page-break-after: avoid;
+        }
+      }
+      @media screen {
+        body {
+          margin: 20px;
+          text-align: center;
+          background: #f0f0f0;
+        }
+        img {
+          max-width: 100%;
+          height: auto;
+          border: 1px solid #ccc;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+      }
+      body {
+        margin: 0;
+        padding: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <img src="$base64Image" alt="Patient Details - Token $token" />
+    <script>
+      window.onload = function() {
+        setTimeout(function() {
+          window.print();
+          // Close window after print dialog (user can cancel)
+          window.onafterprint = function() {
+            setTimeout(function() {
+              window.close();
+            }, 100);
+          };
+        }, 250);
+      };
+    </script>
+  </body>
+</html>
           ''';
-
-          // Create a blob URL for the HTML content
-          final htmlBlob = html.Blob([htmlContent], 'text/html');
-          final htmlUrl = html.Url.createObjectUrlFromBlob(htmlBlob);
-
-          // Open print window
-          final printWindow = html.window.open(htmlUrl, '_blank');
-
-          if (printWindow != null) {
-            // Clean up the blob URLs after a delay
+          
+          // Create blob URL for HTML content using dart:html APIs (web only)
+          final blob = html.Blob([htmlContent], 'text/html');
+          final url = html.Url.createObjectUrlFromBlob(blob);
+          
+          // Open in new window for printing
+          try {
+            html.window.open(url, '_blank');
+            // Clean up blob URL after a delay
             Future.delayed(const Duration(seconds: 30), () {
               html.Url.revokeObjectUrl(url);
-              html.Url.revokeObjectUrl(htmlUrl);
             });
-          } else {
-            // If popup blocked, fallback to download
-            html.AnchorElement(
-              href: url,
-            )
-              ..setAttribute('download', 'parcha_$token.png')
-              ..click();
+          } catch (e) {
+            // Fallback: Download the image if popup was blocked
+            final anchor = html.AnchorElement(href: base64Image)
+              ..setAttribute('download', 'parcha_$token.png');
+            anchor.click();
             html.Url.revokeObjectUrl(url);
-            onError(
-                'Popup blocked. Image downloaded instead. Please print the downloaded file.');
+            onError('Popup blocked. Image will be downloaded. Please print the downloaded file.');
           }
         } catch (e) {
           // Fallback to share API if print dialog fails

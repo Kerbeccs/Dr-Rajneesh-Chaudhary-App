@@ -35,7 +35,7 @@ class _BookingScreenState extends State<BookingScreen> {
   final DatabaseService _db = locator<DatabaseService>();
   String? _pendingExistingTokenId;
   Map<String, dynamic>?
-      _pendingNewPatientData; // {name, mobile, age, aadhaarLast4}
+      _pendingNewPatientData; // {name, mobile, ageYears, ageMonths, ageDays}
   BookingSlot? _pendingSlot;
   DateTime? _pendingDate;
   String? _pendingTimeSlotKey; // e.g. 'morning'
@@ -195,10 +195,11 @@ class _BookingScreenState extends State<BookingScreen> {
         patientToken = await _db.createPatientAfterPayment(
           name: _pendingNewPatientData!['name'] as String,
           mobileNumber: _pendingNewPatientData!['mobile'] as String,
-          age: _pendingNewPatientData!['age'] as int,
-          aadhaarLast4: _pendingNewPatientData!['aadhaarLast4'] as String,
+          ageYears: _pendingNewPatientData!['ageYears'] as int,
+          ageMonths: _pendingNewPatientData!['ageMonths'] as int,
+          ageDays: _pendingNewPatientData!['ageDays'] as int,
           sex: _pendingNewPatientData!['sex'] as String?,
-          weightKg: _pendingNewPatientData!['weightKg'] as int?,
+          weightKg: _pendingNewPatientData!['weightKg'] as double?,
           address: _pendingNewPatientData!['address'] as String?,
           userPhoneNumber: Provider.of<AuthViewModel>(context, listen: false)
               .currentUser
@@ -394,8 +395,9 @@ class _BookingScreenState extends State<BookingScreen> {
       // New patient registration fields
       final nameCtrl = TextEditingController();
       final mobileCtrl = TextEditingController();
-      final ageCtrl = TextEditingController();
-      final aadhaarCtrl = TextEditingController();
+      final ageYearsCtrl = TextEditingController();
+      final ageMonthsCtrl = TextEditingController();
+      final ageDaysCtrl = TextEditingController();
       final weightCtrl = TextEditingController();
       final addressCtrl = TextEditingController();
       String sexValue = 'M';
@@ -420,10 +422,33 @@ class _BookingScreenState extends State<BookingScreen> {
                           const InputDecoration(labelText: 'Mobile Number'),
                       keyboardType: TextInputType.phone,
                     ),
-                    TextField(
-                      controller: ageCtrl,
-                      decoration: const InputDecoration(labelText: 'Age'),
-                      keyboardType: TextInputType.number,
+                    // Age fields: Years, Months, Days
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: ageYearsCtrl,
+                            decoration: const InputDecoration(labelText: 'Years'),
+                            keyboardType: TextInputType.number,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: TextField(
+                            controller: ageMonthsCtrl,
+                            decoration: const InputDecoration(labelText: 'Months'),
+                            keyboardType: TextInputType.number,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: TextField(
+                            controller: ageDaysCtrl,
+                            decoration: const InputDecoration(labelText: 'Days'),
+                            keyboardType: TextInputType.number,
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 8),
                     // Sex selection with simple M/F chips
@@ -464,14 +489,7 @@ class _BookingScreenState extends State<BookingScreen> {
                       controller: weightCtrl,
                       decoration:
                           const InputDecoration(labelText: 'Weight (kg)'),
-                      keyboardType: TextInputType.number,
-                    ),
-                    TextField(
-                      controller: aadhaarCtrl,
-                      decoration: const InputDecoration(
-                          labelText: 'Aadhaar last 4 digits'),
-                      maxLength: 4,
-                      keyboardType: TextInputType.number,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
                     ),
                     TextField(
                       controller: addressCtrl,
@@ -500,15 +518,15 @@ class _BookingScreenState extends State<BookingScreen> {
 
       if (proceed != true) return;
 
-      final age = int.tryParse(ageCtrl.text.trim()) ?? 0;
-      final weight = int.tryParse(weightCtrl.text.trim());
-      final aadhaarLast4 = aadhaarCtrl.text.trim();
+      final ageYears = int.tryParse(ageYearsCtrl.text.trim()) ?? 0;
+      final ageMonths = int.tryParse(ageMonthsCtrl.text.trim()) ?? 0;
+      final ageDays = int.tryParse(ageDaysCtrl.text.trim()) ?? 0;
+      final weight = double.tryParse(weightCtrl.text.trim());
       final mobile = mobileCtrl.text.trim();
       
       if (nameCtrl.text.trim().isEmpty ||
           mobile.isEmpty ||
-          age <= 0 ||
-          aadhaarLast4.length != 4) {
+          (ageYears == 0 && ageMonths == 0 && ageDays == 0)) {
         _showErrorSnackBar('Please fill all fields correctly.');
         return;
       }
@@ -550,8 +568,9 @@ class _BookingScreenState extends State<BookingScreen> {
       _pendingNewPatientData = {
         'name': nameCtrl.text.trim(),
         'mobile': mobileCtrl.text.trim(),
-        'age': age,
-        'aadhaarLast4': aadhaarLast4,
+        'ageYears': ageYears,
+        'ageMonths': ageMonths,
+        'ageDays': ageDays,
         // Map 'M'/'F' chips to 'male'/'female' strings
         'sex': sexValue == 'M' ? 'male' : 'female',
         'weightKg': weight,
@@ -653,10 +672,11 @@ class _BookingScreenState extends State<BookingScreen> {
         patientToken = await _db.createPatientAfterPayment(
           name: _pendingNewPatientData!['name'] as String,
           mobileNumber: _pendingNewPatientData!['mobile'] as String,
-          age: _pendingNewPatientData!['age'] as int,
-          aadhaarLast4: _pendingNewPatientData!['aadhaarLast4'] as String,
+          ageYears: _pendingNewPatientData!['ageYears'] as int,
+          ageMonths: _pendingNewPatientData!['ageMonths'] as int,
+          ageDays: _pendingNewPatientData!['ageDays'] as int,
           sex: _pendingNewPatientData!['sex'] as String?,
-          weightKg: _pendingNewPatientData!['weightKg'] as int?,
+          weightKg: _pendingNewPatientData!['weightKg'] as double?,
           address: _pendingNewPatientData!['address'] as String?,
           userPhoneNumber: Provider.of<AuthViewModel>(context, listen: false)
               .currentUser
@@ -665,7 +685,7 @@ class _BookingScreenState extends State<BookingScreen> {
         );
         patientName = _pendingNewPatientData!['name'] as String;
         mobile = _pendingNewPatientData!['mobile'] as String;
-        age = _pendingNewPatientData!['age'] as int;
+        age = 0; // Not used in payment record, keeping for compatibility
       } else {
         throw Exception('No patient context for payment');
       }

@@ -93,8 +93,9 @@ class CompounderBookingViewModel extends ChangeNotifier {
   Future<String> _createNewPatient({
     required String name,
     required String mobile,
-    required int age,
-    required String aadhaarLast4,
+    required int ageYears,
+    required int ageMonths,
+    required int ageDays,
     String? address,
     String? userPhoneNumber,
     required DateTime appointmentDate,
@@ -102,8 +103,9 @@ class CompounderBookingViewModel extends ChangeNotifier {
     return _db.createPatientAfterPayment(
       name: name,
       mobileNumber: mobile,
-      age: age,
-      aadhaarLast4: aadhaarLast4,
+      ageYears: ageYears,
+      ageMonths: ageMonths,
+      ageDays: ageDays,
       address: address,
       userPhoneNumber: userPhoneNumber,
       appointmentDate: appointmentDate,
@@ -243,8 +245,9 @@ class CompounderBookingViewModel extends ChangeNotifier {
   Future<String> bookForNewPatient({
     required String name,
     required String mobile,
-    required int age,
-    required String aadhaarLast4,
+    required int ageYears,
+    required int ageMonths,
+    required int ageDays,
     String? address,
     required int seatNumber,
     required DateTime selectedDate,
@@ -263,8 +266,9 @@ class CompounderBookingViewModel extends ChangeNotifier {
       final tokenId = await _createNewPatient(
         name: name,
         mobile: mobile,
-        age: age,
-        aadhaarLast4: aadhaarLast4,
+        ageYears: ageYears,
+        ageMonths: ageMonths,
+        ageDays: ageDays,
         address: address,
         userPhoneNumber: userPhoneNumber,
         appointmentDate: selectedDate,
@@ -293,7 +297,7 @@ class CompounderBookingViewModel extends ChangeNotifier {
         patientToken: tokenId,
         patientName: name,
         mobileNumber: mobile,
-        age: age,
+        age: 0, // Not used in payment record, keeping for compatibility
         method: method,
       );
 

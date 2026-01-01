@@ -4,11 +4,12 @@ class PatientRecord {
   final String tokenId; // Unique, human-friendly token (e.g., PAT000123)
   final String name;
   final String mobileNumber;
-  final int age;
-  final String aadhaarLast4;
+  final int ageYears;
+  final int ageMonths;
+  final int ageDays;
   // Optional patient attributes captured during first registration
   final String? sex; // 'male' | 'female' | 'other'
-  final int? weightKg; // patient weight in kilograms
+  final double? weightKg; // patient weight in kilograms (allows decimals)
   final String? address; // patient address (max 50 characters)
   // Phone number of the logged-in user who booked
   final String? userPhoneNumber;
@@ -21,8 +22,9 @@ class PatientRecord {
     required this.tokenId,
     required this.name,
     required this.mobileNumber,
-    required this.age,
-    required this.aadhaarLast4,
+    required this.ageYears,
+    required this.ageMonths,
+    required this.ageDays,
     this.sex,
     this.weightKg,
     this.address,
@@ -37,8 +39,9 @@ class PatientRecord {
       'tokenId': tokenId,
       'name': name,
       'mobileNumber': mobileNumber,
-      'age': age,
-      'aadhaarLast4': aadhaarLast4,
+      'ageYears': ageYears,
+      'ageMonths': ageMonths,
+      'ageDays': ageDays,
       // Only persist if provided
       if (sex != null) 'sex': sex,
       if (weightKg != null) 'weightKg': weightKg,
@@ -51,16 +54,33 @@ class PatientRecord {
   }
 
   factory PatientRecord.fromMap(Map<String, dynamic> map) {
+    // Backward compatibility: if old 'age' field exists, convert to years/months/days
+    int ageYears = 0;
+    int ageMonths = 0;
+    int ageDays = 0;
+    
+    if (map['ageYears'] != null && map['ageMonths'] != null && map['ageDays'] != null) {
+      // New format
+      ageYears = (map['ageYears'] is int) ? map['ageYears'] as int : int.tryParse('${map['ageYears']}') ?? 0;
+      ageMonths = (map['ageMonths'] is int) ? map['ageMonths'] as int : int.tryParse('${map['ageMonths']}') ?? 0;
+      ageDays = (map['ageDays'] is int) ? map['ageDays'] as int : int.tryParse('${map['ageDays']}') ?? 0;
+    } else if (map['age'] != null) {
+      // Old format: assume age is in years
+      final oldAge = (map['age'] is int) ? map['age'] as int : int.tryParse('${map['age']}') ?? 0;
+      ageYears = oldAge;
+      ageMonths = 0;
+      ageDays = 0;
+    }
+    
     return PatientRecord(
       tokenId: map['tokenId'] ?? '',
       name: map['name'] ?? '',
       mobileNumber: map['mobileNumber'] ?? '',
-      age: (map['age'] is int)
-          ? map['age'] as int
-          : int.tryParse('${map['age']}') ?? 0,
-      aadhaarLast4: map['aadhaarLast4'] ?? '',
+      ageYears: ageYears,
+      ageMonths: ageMonths,
+      ageDays: ageDays,
       sex: map['sex'] as String?,
-      weightKg: _parseInt(map['weightKg']),
+      weightKg: _parseDouble(map['weightKg']),
       address: map['address'] as String?,
       userPhoneNumber: map['userPhoneNumber'] as String?,
       lastVisited: _parseDate(map['lastVisited']),
@@ -80,9 +100,10 @@ class PatientRecord {
     }
   }
 
-  static int? _parseInt(dynamic value) {
+  static double? _parseDouble(dynamic value) {
     if (value == null) return null;
-    if (value is int) return value;
-    return int.tryParse(value.toString());
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    return double.tryParse(value.toString());
   }
 }

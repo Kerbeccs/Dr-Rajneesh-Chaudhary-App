@@ -61,8 +61,9 @@ class _CompounderBookingCardState extends State<_CompounderBookingCard> {
   final TextEditingController _tokenController = TextEditingController();
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _mobileController = TextEditingController();
-  final TextEditingController _ageController = TextEditingController();
-  final TextEditingController _aadhaarLast4Controller = TextEditingController();
+  final TextEditingController _ageYearsController = TextEditingController();
+  final TextEditingController _ageMonthsController = TextEditingController();
+  final TextEditingController _ageDaysController = TextEditingController();
   final TextEditingController _addressController = TextEditingController();
 
   String? _selectedDateKey; // 'yyyy-MM-dd'
@@ -94,8 +95,9 @@ class _CompounderBookingCardState extends State<_CompounderBookingCard> {
     _tokenController.dispose();
     _nameController.dispose();
     _mobileController.dispose();
-    _ageController.dispose();
-    _aadhaarLast4Controller.dispose();
+    _ageYearsController.dispose();
+    _ageMonthsController.dispose();
+    _ageDaysController.dispose();
     _addressController.dispose();
     super.dispose();
   }
@@ -118,14 +120,14 @@ class _CompounderBookingCardState extends State<_CompounderBookingCard> {
     String tokenId = _tokenController.text.trim();
     String patientName = _nameController.text.trim();
     String mobile = _mobileController.text.trim();
-    final int age = int.tryParse(_ageController.text.trim()) ?? 0;
-    final String aadhaar4 = _aadhaarLast4Controller.text.trim();
+    final int ageYears = int.tryParse(_ageYearsController.text.trim()) ?? 0;
+    final int ageMonths = int.tryParse(_ageMonthsController.text.trim()) ?? 0;
+    final int ageDays = int.tryParse(_ageDaysController.text.trim()) ?? 0;
 
     if (tokenId.isEmpty &&
         (patientName.isEmpty ||
             mobile.isEmpty ||
-            age <= 0 ||
-            aadhaar4.length != 4)) {
+            (ageYears == 0 && ageMonths == 0 && ageDays == 0))) {
       _showSnack('Provide token or full new patient details', Colors.red);
       return;
     }
@@ -208,8 +210,9 @@ class _CompounderBookingCardState extends State<_CompounderBookingCard> {
         tokenId = await db.createPatientAfterPayment(
           name: patientName,
           mobileNumber: mobile,
-          age: age,
-          aadhaarLast4: aadhaar4,
+          ageYears: ageYears,
+          ageMonths: ageMonths,
+          ageDays: ageDays,
           address: _addressController.text.trim(),
           userPhoneNumber: userPhone,
           appointmentDate: date,
@@ -244,7 +247,7 @@ class _CompounderBookingCardState extends State<_CompounderBookingCard> {
           patientToken: tokenId,
           patientName: patientName,
           mobileNumber: mobile,
-          age: age,
+          age: 0, // Not used in payment record, keeping for compatibility
           method: method!,
         );
         _showSnack('Booked and logged payment ($method)', Colors.green);
@@ -264,8 +267,9 @@ class _CompounderBookingCardState extends State<_CompounderBookingCard> {
     _tokenController.clear();
     _nameController.clear();
     _mobileController.clear();
-    _ageController.clear();
-    _aadhaarLast4Controller.clear();
+    _ageYearsController.clear();
+    _ageMonthsController.clear();
+    _ageDaysController.clear();
     _addressController.clear();
     _selectedSeat = null;
   }
@@ -397,18 +401,24 @@ class _CompounderBookingCardState extends State<_CompounderBookingCard> {
               Row(children: [
                 Expanded(
                   child: TextField(
-                    controller: _ageController,
-                    decoration: const InputDecoration(labelText: 'Age'),
+                    controller: _ageYearsController,
+                    decoration: const InputDecoration(labelText: 'Years'),
                     keyboardType: TextInputType.number,
                   ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: TextField(
-                    controller: _aadhaarLast4Controller,
-                    decoration:
-                        const InputDecoration(labelText: 'Aadhaar Last 4'),
-                    maxLength: 4,
+                    controller: _ageMonthsController,
+                    decoration: const InputDecoration(labelText: 'Months'),
+                    keyboardType: TextInputType.number,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    controller: _ageDaysController,
+                    decoration: const InputDecoration(labelText: 'Days'),
                     keyboardType: TextInputType.number,
                   ),
                 ),
@@ -945,12 +955,21 @@ class _TokenSearchScreenState extends State<_TokenSearchScreen> {
       // Add mobile number matches
       for (var doc in mobileQuery.docs) {
         final data = doc.data();
+        // Format age: new format (ageYears/ageMonths/ageDays) or old format (age)
+        String ageStr = '';
+        if (data['ageYears'] != null || data['ageMonths'] != null || data['ageDays'] != null) {
+          final years = (data['ageYears'] ?? 0).toString();
+          final months = (data['ageMonths'] ?? 0).toString();
+          final days = (data['ageDays'] ?? 0).toString();
+          ageStr = '$years years $months months $days days';
+        } else if (data['age'] != null) {
+          ageStr = '${data['age']} years';
+        }
         tokensMap[data['tokenId']] = {
           'tokenId': data['tokenId'] ?? '',
           'name': data['name'] ?? '',
-          'age': data['age'] ?? '',
+          'age': ageStr,
           'mobileNumber': data['mobileNumber'] ?? '',
-          'aadhaarLast4': data['aadhaarLast4'] ?? '',
           'address': data['address'] ?? '',
           'userPhoneNumber': data['userPhoneNumber'] ?? '',
           'createdAt': data['createdAt'],
@@ -961,12 +980,21 @@ class _TokenSearchScreenState extends State<_TokenSearchScreen> {
       // Add userPhoneNumber matches
       for (var doc in userPhoneQuery.docs) {
         final data = doc.data();
+        // Format age: new format (ageYears/ageMonths/ageDays) or old format (age)
+        String ageStr = '';
+        if (data['ageYears'] != null || data['ageMonths'] != null || data['ageDays'] != null) {
+          final years = (data['ageYears'] ?? 0).toString();
+          final months = (data['ageMonths'] ?? 0).toString();
+          final days = (data['ageDays'] ?? 0).toString();
+          ageStr = '$years years $months months $days days';
+        } else if (data['age'] != null) {
+          ageStr = '${data['age']} years';
+        }
         tokensMap[data['tokenId']] = {
           'tokenId': data['tokenId'] ?? '',
           'name': data['name'] ?? '',
-          'age': data['age'] ?? '',
+          'age': ageStr,
           'mobileNumber': data['mobileNumber'] ?? '',
-          'aadhaarLast4': data['aadhaarLast4'] ?? '',
           'address': data['address'] ?? '',
           'userPhoneNumber': data['userPhoneNumber'] ?? '',
           'createdAt': data['createdAt'],
@@ -1126,9 +1154,6 @@ class _TokenSearchScreenState extends State<_TokenSearchScreen> {
                                 Text('Name: ${token['name']}'),
                                 Text('Age: ${token['age']}'),
                                 Text('Patient Phone: ${token['mobileNumber']}'),
-                                if (token['aadhaarLast4'] != null &&
-                                    token['aadhaarLast4'].toString().isNotEmpty)
-                                  Text('Aadhaar: ${token['aadhaarLast4']}'),
                                 if (token['address'] != null &&
                                     token['address'].toString().isNotEmpty)
                                   Text('Address: ${token['address']}'),
