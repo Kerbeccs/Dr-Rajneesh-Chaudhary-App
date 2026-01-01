@@ -211,7 +211,7 @@ class ParchaPrintService {
           align: ui.TextAlign.right, maxWidth: phoneColumnWidth);
       textPainter('Token: $token', tokenColumnRightX, startY,
           align: ui.TextAlign.right, maxWidth: tokenColumnWidth);
-      startY += gapY * 0.5; // Reduced gap between seat/phone/token row and dates row
+      startY += gapY * 1.0; // Reduced gap between seat/phone/token row and dates row
 
       // Booking Date, Appointment Date, and Valid till in one row spanning full width
       final double fullWidth = baseImage.width - leftMargin - rightMargin;
@@ -249,7 +249,7 @@ class ParchaPrintService {
               bookingDateWidth +
               appointmentDateWidth +
               rightShift);
-      startY += gapY;
+      startY += gapY*2.0;
       textPainter('Name: $name', tokenColumnRightX, startY,
           align: ui.TextAlign.right, maxWidth: tokenColumnWidth);
       startY += gapY;
