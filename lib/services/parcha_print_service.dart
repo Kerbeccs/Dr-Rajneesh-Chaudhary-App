@@ -41,7 +41,7 @@ class ParchaPrintService {
         final years = (p['ageYears'] ?? 0).toString();
         final months = (p['ageMonths'] ?? 0).toString();
         final days = (p['ageDays'] ?? 0).toString();
-        ageStr = '$years years $months months $days days';
+        ageStr = '$years Y $months M $days D';
       } else if (p['age'] != null) {
         // Backward compatibility: old format
         ageStr = '${p['age']} years';
